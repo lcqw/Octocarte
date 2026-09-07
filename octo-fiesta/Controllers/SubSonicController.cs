@@ -254,6 +254,18 @@ public class SubsonicController : ControllerBase
             }
         }
 
+        if (provider == "apple")
+        {
+            var localId = await _localLibraryService.GetLocalIdForExternalSongAsync(provider, externalId!);
+            if (!string.IsNullOrEmpty(localId))
+            {
+                parameters["mediaId"] = localId;
+                parameters["id"] = localId;
+                var local = await _proxyService.RelayAsync("rest/getTranscodeDecision", parameters);
+                return File(local.Body, local.ContentType ?? $"application/{format}");
+            }
+        }
+
         var protocol = Request.Headers["X-Forwarded-Proto"].FirstOrDefault() ?? Request.Scheme;
         var song = await _metadataService.GetSongAsync(provider!, externalId!);
         if (song != null)

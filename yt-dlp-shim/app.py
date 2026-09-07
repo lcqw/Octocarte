@@ -52,7 +52,6 @@ PORT = int(os.environ.get("PORT", "8080"))
 # Root the /download endpoint is allowed to write under (the shared music mount).
 # dest arrives over the wire, so downloads are confined here even though the shim
 # is internal-only.
-_DOWNLOAD_ROOT = os.path.realpath(os.environ.get("DOWNLOAD_ROOT", "/music"))
 
 # Audio format selector shared by /search (single-extraction warm) and
 # /stream's _resolve_url (cold path), so both request the exact same format.
@@ -248,7 +247,7 @@ def _run(args: list[str], timeout: int = 20, label: str = "ytdlp",
         log.info("ytdlp label=%s bg=%d gate_wait_ms=%.0f wall_ms=%.0f rc=%d",
                  label, int(bg), gate_ms, wall_ms, cp.returncode)
         if cp.returncode != 0:
-            log.warning("yt-dlp exit %d (%s): %s", cp.returncode, label, cp.stderr.strip()[:300])
+            log.warning("yt-dlp exit %d (%s)", cp.returncode, label)
             return cp if capture else None
         return cp if capture else cp.stdout
     finally:
@@ -688,7 +687,7 @@ def _open_upstream(url: str, headers: dict, video_id: str):
     try:
         return _SESSION.get(url, stream=True, timeout=(8, 30), headers=headers)
     except Exception as e:
-        log.warning("stream upstream failed for %s: %s", video_id, e)
+        log.warning("stream upstream failed for %s (%s)", video_id, type(e).__name__)
         return None
 
 
@@ -722,18 +721,8 @@ def stream():
     # the bad entry, re-resolve once, and retry before surfacing a failure, so
     # one stale URL does not fail every play of this id for the cache TTL.
     if upstream is not None and upstream.status_code in (403, 410):
-        # Google states the reason in the body and headers. Closing without
-        # reading them threw away the only direct evidence of why a play failed,
-        # which cost a long debugging session on 2026-08-14. Bounded read: a
-        # refusal body is small, and we are about to discard the response.
-        try:
-            detail = upstream.raw.read(512, decode_content=True) or b""
-        except Exception:
-            detail = b""
-        log.warning(
-            "stream %s: upstream %d headers=%s body=%r",
-            video_id, upstream.status_code, dict(upstream.headers), detail[:200],
-        )
+        # Do not log signed CDN URLs, response headers or upstream error bodies.
+        log.warning("stream %s: upstream %d", video_id, upstream.status_code)
         upstream.close()
         _url_cache_evict_if(video_id, url)
         url = _resolve_url(video_id)

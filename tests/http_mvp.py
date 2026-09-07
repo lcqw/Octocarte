@@ -13,7 +13,7 @@ import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-state = {"local": False, "posts": [], "youtube": 0, "local_streams": 0}
+state = {"local": False, "catalog_down": False, "posts": [], "youtube": 0, "local_streams": 0}
 post_started = threading.Event()
 release_post = threading.Event()
 local_song = {"id": "local-42", "title": "Song", "artist": "Artist", "album": "Album",
@@ -39,6 +39,8 @@ class Fixture(BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
         if path == "/api/search":
+            if state["catalog_down"]:
+                return self.reply({}, 503)
             return self.reply({"songs": [{"id": "42", "name": "Song", "artistName": "Artist", "albumName": "Album", "albumId": "7", "durationMs": 120000}], "albums": [], "artists": []})
         if path == "/search":
             state["youtube"] += 1
@@ -140,6 +142,10 @@ try:
         assert response.headers["Content-Range"] == "bytes 0-1/200"
         assert response.read() == b"AL"
     assert state["youtube"] == youtube_before and state["local_streams"] == 1
+    state["catalog_down"] = True
+    with get("/rest/search3", query="Song") as response:
+        songs = json.load(response)["subsonic-response"]["searchResult3"]["song"]
+    assert len(songs) == 1 and songs[0]["id"] == "local-42"
     print("PASS: HTTP catalog, external IDs, AAC metadata, nonblocking album POST, burst guard, ranges, local search replacement and old-ID Navidrome playback")
 finally:
     release_post.set()

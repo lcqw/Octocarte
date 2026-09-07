@@ -9,9 +9,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates curl ffmpeg unzip \
     && rm -rf /var/lib/apt/lists/*
 
-# Pull yt-dlp directly from GitHub releases. Pinning to "latest" by default so
-# rebuilds keep up with YouTube's frequent format-extractor breakage; pin to a
-# specific tag with --build-arg YTDLP_VERSION=2025.10.22 if you need stability.
+# Pull a verified yt-dlp release. Override the build argument explicitly to
+# upgrade when YouTube changes its extractor behavior.
 RUN if [ "$YTDLP_VERSION" = "latest" ]; then \
         curl -fsSL -o /usr/local/bin/yt-dlp https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp; \
     else \

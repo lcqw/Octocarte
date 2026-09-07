@@ -700,7 +700,7 @@ public class SubsonicResponseBuilder
                 {
                     protocol,
                     container,
-                    codec = container,
+                    codec = song?.ExternalProvider == "apple" && !song.IsLocal && string.IsNullOrEmpty(song.LocalPath) ? "aac" : container,
                     audioChannels = 2,
                     audioBitrate = bitRate * 1000
                 }

@@ -1,3 +1,5 @@
+> **Octocarte:** see [setup, behavior and validation status](README.OCTOCARTE.md). Original upstream documentation is preserved below.
+
 # Octo-Fiesta
 
 A Subsonic API proxy server that transparently integrates multiple music streaming providers as sources. When a song is not available in your local Navidrome library, it is automatically fetched from your configured provider, downloaded, and served to your Subsonic-compatible client. The downloaded song is then added to your library, making it available locally for future listens.

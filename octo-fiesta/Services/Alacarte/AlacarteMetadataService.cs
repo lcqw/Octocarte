@@ -6,7 +6,7 @@ using octo_fiesta.Models.Search;
 
 namespace octo_fiesta.Services.Alacarte;
 
-public sealed class AlacarteMetadataService(AlacarteClient api) : IMusicMetadataService, IDisposable
+public sealed class AlacarteMetadataService(AlacarteClient api, ILogger<AlacarteMetadataService>? logger = null) : IMusicMetadataService, IDisposable
 {
     private readonly MemoryCache songs = new(new MemoryCacheOptions { SizeLimit = 10000 });
     internal static string? Text(JsonElement e, string key) => e.TryGetProperty(key, out var v) && v.ValueKind != JsonValueKind.Null ? v.ToString() : null;
@@ -39,12 +39,21 @@ public sealed class AlacarteMetadataService(AlacarteClient api) : IMusicMetadata
         Id = $"ext-apple-artist-{id}", ExternalProvider = "apple", ExternalId = id, Name = Text(e, "name") ?? "" }; }
     public async Task<SearchResult> SearchAllAsync(string query, int songLimit = 20, int albumLimit = 20, int artistLimit = 20)
     {
-        var limit = Math.Clamp(Math.Max(songLimit, Math.Max(albumLimit, artistLimit)), 1, 50);
-        var data = await api.GetAsync($"api/search?q={Uri.EscapeDataString(query)}&limit={limit}&types=songs,albums,artists");
-        return new SearchResult { Songs = Items(data, "songs").Take(Math.Max(0, songLimit)).Select(t => MapSong(t)).ToList(),
-            Albums = Items(data, "albums").Take(Math.Max(0, albumLimit)).Select(MapAlbum).ToList(),
-            Artists = Items(data, "artists").Take(Math.Max(0, artistLimit)).Select(MapArtist).ToList() };
+        try
+        {
+            var limit = Math.Clamp(Math.Max(songLimit, Math.Max(albumLimit, artistLimit)), 1, 50);
+            var data = await api.GetAsync($"api/search?q={Uri.EscapeDataString(query)}&limit={limit}&types=songs,albums,artists");
+            return new SearchResult { Songs = Items(data, "songs").Take(Math.Max(0, songLimit)).Select(t => MapSong(t)).ToList(),
+                Albums = Items(data, "albums").Take(Math.Max(0, albumLimit)).Select(MapAlbum).ToList(),
+                Artists = Items(data, "artists").Take(Math.Max(0, artistLimit)).Select(MapArtist).ToList() };
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            logger?.LogWarning("ALACarte catalog unavailable; returning local search results only");
+            return new SearchResult();
+        }
     }
+
     public async Task<List<Song>> SearchSongsAsync(string query, int limit = 20) => (await SearchAllAsync(query, limit, 0, 0)).Songs;
     public async Task<List<Album>> SearchAlbumsAsync(string query, int limit = 20) => (await SearchAllAsync(query, 0, limit, 0)).Albums;
     public async Task<List<Artist>> SearchArtistsAsync(string query, int limit = 20) => (await SearchAllAsync(query, 0, 0, limit)).Artists;

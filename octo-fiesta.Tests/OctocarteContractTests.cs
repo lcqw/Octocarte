@@ -53,6 +53,27 @@ public class OctocarteContractTests
     }
 
     [Fact]
+    public async Task CatalogOutageDoesNotBreakLocalSearchMerging()
+    {
+        using var metadata = new AlacarteMetadataService(new AlacarteClient(Factory((req, ct) =>
+            Task.FromResult(Json("{}", HttpStatusCode.ServiceUnavailable)))));
+        var result = await metadata.SearchAllAsync("Song");
+        Assert.Empty(result.Songs);
+        Assert.Empty(result.Albums);
+    }
+
+    [Fact]
+    public void TemporaryTranscodeDecisionAdvertisesAac()
+    {
+        var response = (JsonResult)new SubsonicResponseBuilder().CreateTranscodeDecisionResponse(
+            new Song { ExternalProvider = "apple" }, "http");
+        using var json = JsonDocument.Parse(JsonSerializer.Serialize(response.Value));
+        var stream = json.RootElement.GetProperty("subsonic-response").GetProperty("transcodeDecision").GetProperty("sourceStream");
+        Assert.Equal("m4a", stream.GetProperty("container").GetString());
+        Assert.Equal("aac", stream.GetProperty("codec").GetString());
+    }
+
+    [Fact]
     public async Task ColdSongLookupUsesAlacarteSongLinkAndAlbum()
     {
         using var metadata = new AlacarteMetadataService(new AlacarteClient(Factory((req, ct) => Task.FromResult(

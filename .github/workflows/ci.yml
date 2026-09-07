@@ -31,3 +31,18 @@ jobs:
 
       - name: Test
         run: dotnet test --configuration Release --no-build --verbosity normal
+
+      - name: HTTP MVP contract
+        run: |
+          docker build -t octocarte:mvp .
+          python3 tests/http_mvp.py
+
+  shim-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: pip install flask==3.1.3 requests==2.34.2 pytest
+      - run: python -m pytest yt-dlp-shim/tests -q
