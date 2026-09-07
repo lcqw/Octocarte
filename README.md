@@ -10,7 +10,9 @@ ALAC acquisition, an ALACarte-initiated local Navidrome scan, local replacement
 and subsequent native playback/seeking. Wavio phone acceptance passed, including
 artist photos/top songs and unowned playback. Entergalactic completed as a full
 15-track native ALAC album. Temporary local validation services were cleaned up.
-NAS deployment requires shared music storage. See [validation](docs/octocarte/VALIDATION.md).
+The complete Compose package also passed fresh-install and restart checks; the
+NAS daily-use trial remains outstanding. See [workflow validation](docs/octocarte/VALIDATION.md)
+and [package validation](deploy/VALIDATION.md).
 
 ## Install
 

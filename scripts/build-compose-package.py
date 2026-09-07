@@ -40,6 +40,10 @@ def main():
     args = parser.parse_args()
     if not re.fullmatch(r'[a-z0-9][a-z0-9_.-]{0,63}', args.version):
         parser.error('version must be a lowercase Docker tag')
+    for name in ('octocarte', 'octocarte-shim', 'octocarte-alacarte', 'octocarte-wrapper'):
+        if subprocess.run(['docker', 'image', 'inspect', name + ':' + args.version],
+                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
+            parser.error('candidate version already exists; choose a new version to retain previous images')
     destination = args.output.resolve()
     if destination == ROOT or ROOT in destination.parents or destination.exists():
         parser.error('output must be a new directory outside the checkout')

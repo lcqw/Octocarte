@@ -1,4 +1,5 @@
-Complete Compose package plan
+# Complete Compose package plan
+
 - Reuse the validated proxy/shim and merge the tested service-auth change through PR #1.
 - Build pinned ALACarte source with the catalog/auth patches automatically; preserve its source/license in the package. Allow its existing wrapper login helper to select the package's versioned wrapper image through one environment setting; keep its login implementation intact.
 - Ship one five-service Compose project with shared music storage, separate persisted data, automatically provisioned service token, and local images recorded by immutable image ID. Normal Apple/Navidrome setup remains in their UIs.

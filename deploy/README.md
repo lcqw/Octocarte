@@ -6,7 +6,8 @@ project: Octocarte, Navidrome, the YouTube shim, ALACarte and its wrapper. Users
 complete normal account setup; no extensions need to be installed afterward.
 
 Status: private NAS preview. The earlier Wavio workflow is validated; this
-deployment still needs the NAS daily-use trial. Public images are not published.
+deployment passed a fresh isolated Compose check and still needs the NAS daily-use
+trial. See [package validation](VALIDATION.md). Public images are not published.
 The package carries exact local images and their source so the NAS can load them
 without Git, Python or a compiler. It targets Linux AMD64 because the upstream
 ALACarte downloader and wrapper require it.
@@ -23,7 +24,8 @@ python3 scripts/build-compose-package.py --version nas-preview.1 --output ../oct
 This builds distinct images, applies the included ALACarte changes automatically,
 and writes a transferable directory containing `images.tar`, `images.env`,
 `images.lock.json`, Compose files, setup helpers, source archives and checksums.
-It does not start services or publish anything. A local ALACarte Git checkout can
+It does not start services or publish anything. Choose a new version for each
+build; the helper refuses to overwrite existing candidate image tags. A local ALACarte Git checkout can
 be supplied with `--alacarte-source /path/to/alacarte` to avoid downloading it
 again; only the pinned committed revision is read.
 
