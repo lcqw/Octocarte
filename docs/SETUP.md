@@ -35,6 +35,32 @@ The `initialize` container showing **Exited (0)** means setup succeeded. The
 wrapper can exit before Apple sign-in is completed. After sign-in, check ALACarte's
 connection status if acquisition is unavailable.
 
+## Download quality
+
+ALACarte offers **FLAC, ALAC, Dolby Atmos and AAC** in its settings. The default is
+**FLAC**: ALACarte downloads Apple Lossless audio and converts it to FLAC without
+losing audio quality. Select ALAC to retain the original lossless format, AAC for
+smaller lossy files, or Dolby Atmos for releases that offer it. Atmos playback
+requires a compatible client and device.
+
+Octocarte uses ALACarte's saved choice. Changing the setting affects future
+downloads; it does not convert albums already in your library.
+
+## Lyrics
+
+**Your Apple `media-user-token` is required for lyrics.** Grab the raw cookie value
+from [music.apple.com](https://music.apple.com/) → DevTools → Application → Cookies.
+
+1. Sign into Apple Music in Chrome or Edge, then open the browser's developer tools.
+2. Under **Application → Cookies → https://music.apple.com**, find
+   `media-user-token` and copy its **Value** only.
+3. In **ALACarte → Settings → media-user-token**, paste the value and save it.
+   Enable **Download lyrics** and choose **LRC** for line-synced lyrics.
+
+Lyrics depend on availability for the track. Keep the token in ALACarte's settings;
+do not put it in `.env`, Compose files, screenshots or issue reports. If Apple
+rejects it later, replace it with the current value from your signed-in browser.
+
 ## Ports and access
 
 | Setting | Default | Purpose |

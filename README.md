@@ -12,8 +12,9 @@ Apple Music discovery and album downloads for your Navidrome library, built on
 - **Apple Music search:** Search Apple Music's artists, albums and songs alongside your local library from your usual Subsonic client, using ALACarte's catalog search and Octo-Fiesta's client support.
 - **Artist pages:** Browse artist photos, discographies and Apple-ranked top songs. Octocarte's ALACarte integration includes these automatically, with no extra extensions to install.
 - **Listen while downloading:** Play a song you don't have yet and a temporary YouTube stream starts while ALACarte downloads its whole album in the background. Playback uses the streaming system adapted from Octo, including seeking support. The temporary stream is AAC/M4A, not lossless.
-- **Lossless albums:** ALACarte downloads complete albums in ALAC or lossless FLAC, with artwork, metadata and optional lyrics. Choose your quality and other download preferences in its web UI.
-- **Local playback takes over:** After ALACarte triggers a Navidrome scan, Octocarte matches the downloaded tracks to your library. Later searches and playback use the local lossless files.
+- **Download quality:** Choose FLAC, ALAC, Dolby Atmos or AAC in ALACarte, with artwork and metadata included. **By default, ALACarte converts ALAC to FLAC losslessly.** Dolby Atmos is available for supported releases.
+- **Download lyrics:** Save synced lyrics alongside your music when available. **Requires your Apple `media-user-token`** in ALACarte settings—see [lyrics setup](docs/SETUP.md#lyrics).
+- **Local playback takes over:** After ALACarte triggers a Navidrome scan, Octocarte matches the downloaded tracks to your library. Later searches and playback use the downloaded files in your chosen format.
 - **Library-aware downloads:** ALACarte reuses queued album jobs, skips albums already in your library and downloads only missing tracks from partially downloaded albums.
 
 ## Disclaimer
@@ -57,6 +58,7 @@ from `docker compose logs alacarte` and enter it on the welcome screen.
 See [first login](docs/SETUP.md#first-login) for help.
 
 Create your ALACarte login, sign into Apple and choose your download preferences.
+For lyrics, [add your media-user-token and enable downloads](docs/SETUP.md#lyrics).
 Enable Navidrome integration in ALACarte with your Navidrome address and scan
 credentials.
 
