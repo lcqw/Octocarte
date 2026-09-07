@@ -81,7 +81,7 @@ class Fixture(BaseHTTPRequestHandler):
         if path == "/rest/search3":
             response["searchResult3"] = {"song": [local_song] if state["local"] else [], "album": [], "artist": []}
         if path == "/rest/getArtist":
-            response["artist"] = {"id": "local-artist", "name": "Artist", "album": []}
+            response["artist"] = {"id": "local-artist", "name": "Artist", "coverArt": "ar-local-artist_0", "artistImageUrl": "http://navidrome:4533/broken-photo", "album": [{"id": "local-7", "name": "Album"}] if state["local"] else []}
         if path == "/rest/getTopSongs":
             response["topSongs"] = {"song": [local_song]}
         if path == "/rest/getOpenSubsonicExtensions":
@@ -194,6 +194,23 @@ try:
     # Simulate ALACarte completing and Navidrome indexing the native file.
     state["local"] = True
     youtube_before = state["youtube"]
+    # After indexing, both generations of artist-info must retain Apple's photo.
+    # The server's same-name biography and internal image URL must not replace it.
+    for _ in range(2):
+        with get("/rest/getArtist", id="local-artist") as response:
+            profile = json.load(response)["subsonic-response"]["artist"]
+        assert profile["id"] == "local-artist"
+        assert profile["coverArt"] == "ext-apple-artist-9"
+        assert profile["artistImageUrl"] == "https://images.example/600x600bb.jpg"
+        assert profile["album"][0]["id"] == "local-7"
+        for endpoint, key in [("getArtistInfo", "artistInfo"), ("getArtistInfo2.view", "artistInfo2")]:
+            with get("/rest/" + endpoint, id="local-artist") as response:
+                info = json.load(response)["subsonic-response"][key]
+            assert info["largeImageUrl"] == profile["artistImageUrl"] and "biography" not in info
+            with get("/rest/" + endpoint, id="local-artist", f="xml") as response:
+                info_xml = ET.fromstring(response.read()).find("{*}" + key)
+            assert info_xml.find("{*}largeImageUrl").text == profile["artistImageUrl"]
+            assert info_xml.find("{*}biography") is None
     with get("/rest/search3", query="Song") as response:
         songs = json.load(response)["subsonic-response"]["searchResult3"]["song"]
     assert len(songs) == 1 and songs[0]["id"] == "local-42", songs

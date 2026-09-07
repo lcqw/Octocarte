@@ -489,6 +489,16 @@ public class SubsonicController : ControllerBase
         var (external, provider, type, externalId) = _localLibraryService.ParseExternalId(id);
         if (!external || provider != "apple")
         {
+            if (!external && _subsonicSettings.MusicService == MusicService.Alacarte)
+            {
+                var matched = await ResolveLocalAppleArtistAsync(parameters);
+                if (matched is not null)
+                {
+                    // Navidrome's name-based biography can describe a different artist.
+                    // ALACarte currently supplies artwork, but no verified biography.
+                    return _responseBuilder.CreateArtistInfoResponse(format, name, matched.Value.Artist);
+                }
+            }
             var result = await _proxyService.RelayAsync("rest/get" + char.ToUpperInvariant(name[0]) + name[1..], parameters);
             return File(result.Body, result.ContentType ?? $"application/{format}");
         }
@@ -624,31 +634,55 @@ public class SubsonicController : ControllerBase
             localAlbumNames.Add(StringNormalizer.CreateComparisonKey(album.Attribute("name")?.Value));
         }
 
-        var candidates = (await _metadataService.SearchArtistsAsync(artistName, 20))
-            .Where(a => !string.IsNullOrEmpty(a.ExternalId) && a.Name.Equals(artistName, StringComparison.OrdinalIgnoreCase))
-            .OrderByDescending(a => a.AlbumCount ?? 0)
-            .ThenByDescending(a => string.Equals(a.Name, artistName, StringComparison.Ordinal))
-            .ToList();
-
         var externalAlbums = new List<Album>();
-        List<Album>? firstCandidateAlbums = null;
-
-        foreach (var candidate in candidates.Take(5))
+        if (_subsonicSettings.MusicService == MusicService.Alacarte)
         {
-            var candidateAlbums = await _metadataService.GetArtistAlbumsAsync(candidate.ExternalProvider!, candidate.ExternalId!);
-            firstCandidateAlbums ??= candidateAlbums;
-
-            if (localAlbumNames.Count == 0 ||
-                candidateAlbums.Any(a => localAlbumNames.Contains(StringNormalizer.CreateComparisonKey(a.Title))))
+            var matched = await MatchAppleArtistAsync(artistName, localAlbumNames);
+            if (matched is not null)
             {
-                externalAlbums = candidateAlbums;
-                break;
+                externalAlbums = matched.Value.Albums;
+                var profile = matched.Value.Artist;
+                if (!string.IsNullOrWhiteSpace(profile.ImageUrl))
+                {
+                    // Clients such as Aonsoku fetch coverArt rather than artistImageUrl.
+                    // Keep the local artist ID, but route its photo to the Apple artist.
+                    if (artistData is Dictionary<string, object> fields)
+                    {
+                        fields["artistImageUrl"] = profile.ImageUrl;
+                        fields["coverArt"] = profile.Id;
+                    }
+                    artistXml?.SetAttributeValue("artistImageUrl", profile.ImageUrl);
+                    artistXml?.SetAttributeValue("coverArt", profile.Id);
+                }
             }
         }
-
-        if (externalAlbums.Count == 0 && firstCandidateAlbums != null)
+        else
         {
-            externalAlbums = firstCandidateAlbums;
+            var candidates = (await _metadataService.SearchArtistsAsync(artistName, 20))
+                .Where(a => !string.IsNullOrEmpty(a.ExternalId) && a.Name.Equals(artistName, StringComparison.OrdinalIgnoreCase))
+                .OrderByDescending(a => a.AlbumCount ?? 0)
+                .ThenByDescending(a => string.Equals(a.Name, artistName, StringComparison.Ordinal))
+                .ToList();
+
+            List<Album>? firstCandidateAlbums = null;
+
+            foreach (var candidate in candidates.Take(5))
+            {
+                var candidateAlbums = await _metadataService.GetArtistAlbumsAsync(candidate.ExternalProvider!, candidate.ExternalId!);
+                firstCandidateAlbums ??= candidateAlbums;
+
+                if (localAlbumNames.Count == 0 ||
+                    candidateAlbums.Any(a => localAlbumNames.Contains(StringNormalizer.CreateComparisonKey(a.Title))))
+                {
+                    externalAlbums = candidateAlbums;
+                    break;
+                }
+            }
+
+            if (externalAlbums.Count == 0 && firstCandidateAlbums != null)
+            {
+                externalAlbums = firstCandidateAlbums;
+            }
         }
 
         // Fill artist info for each album (external API may not include it in artist/albums endpoint)
@@ -702,6 +736,67 @@ public class SubsonicController : ControllerBase
             version = "1.16.1",
             artist = artistData
         });
+    }
+
+    private async Task<(Artist Artist, List<Album> Albums)?> ResolveLocalAppleArtistAsync(Dictionary<string, string> parameters)
+    {
+        var lookup = new Dictionary<string, string>(parameters) { ["f"] = "json" };
+        var response = await _proxyService.RelaySafeAsync("rest/getArtist", lookup);
+        if (!response.Success || response.Body is null) return null;
+        try
+        {
+            using var document = JsonDocument.Parse(response.Body);
+            if (!document.RootElement.TryGetProperty("subsonic-response", out var root) ||
+                !root.TryGetProperty("artist", out var artist)) return null;
+            var name = artist.TryGetProperty("name", out var value) ? value.GetString() : null;
+            var titles = new HashSet<string>();
+            if (artist.TryGetProperty("album", out var albums) && albums.ValueKind == JsonValueKind.Array)
+                foreach (var album in albums.EnumerateArray())
+                    if (album.TryGetProperty("name", out var title))
+                        titles.Add(StringNormalizer.CreateComparisonKey(title.GetString()));
+            return await MatchAppleArtistAsync(name ?? "", titles);
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<(Artist Artist, List<Album> Albums)?> MatchAppleArtistAsync(string name, HashSet<string> localTitles)
+    {
+        var titles = localTitles.Where(t => !string.IsNullOrWhiteSpace(t)).ToHashSet();
+        if (string.IsNullOrWhiteSpace(name) || titles.Count == 0) return null;
+        try
+        {
+            var candidates = (await _metadataService.SearchArtistsAsync(name, 20))
+                .Where(a => a.ExternalProvider == "apple" && !string.IsNullOrEmpty(a.ExternalId) &&
+                    a.Name.Equals(name, StringComparison.OrdinalIgnoreCase))
+                .DistinctBy(a => a.ExternalId).Take(5);
+            var matches = new List<(Artist Artist, List<Album> Albums, int Score)>();
+            foreach (var candidate in candidates)
+            {
+                var albums = await _metadataService.GetArtistAlbumsAsync("apple", candidate.ExternalId!);
+                var score = albums.Select(a => StringNormalizer.CreateComparisonKey(a.Title))
+                    .Distinct().Count(titles.Contains);
+                if (score > 0) matches.Add((candidate, albums, score));
+            }
+            var ranked = matches.OrderByDescending(m => m.Score).ToList();
+            if (ranked.Count == 0 || (ranked.Count > 1 && ranked[0].Score == ranked[1].Score)) return null;
+            var match = ranked[0];
+            var details = await _metadataService.GetArtistAsync("apple", match.Artist.ExternalId!);
+            if (details is not null && !details.Name.Equals(name, StringComparison.OrdinalIgnoreCase)) return null;
+            return (new Artist
+            {
+                Id = match.Artist.Id, Name = match.Artist.Name,
+                ExternalProvider = "apple", ExternalId = match.Artist.ExternalId,
+                ImageUrl = details?.ImageUrl ?? match.Artist.ImageUrl
+            }, match.Albums);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            _logger.LogDebug("Apple artist profile unavailable; retaining Navidrome metadata");
+            return null;
+        }
     }
 
     private static readonly string[] CollaborationWords = { "feat", "featuring", "ft", "with", "and", "x" };
