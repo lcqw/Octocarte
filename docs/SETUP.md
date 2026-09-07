@@ -18,7 +18,7 @@ per Docker host.
 
 ## First login
 
-Open ALACarte at `http://YOUR_HOST:7373`. If the welcome screen asks for a one-time
+Open ALACarte at `http://<octocarte-host-ip>:7373`. If the welcome screen asks for a one-time
 setup token, retrieve it locally with:
 
 ```sh
@@ -39,7 +39,7 @@ connection status if acquisition is unavailable.
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `HOST_BIND` | `127.0.0.1` | Bind to your LAN address for access from other devices |
+| `HOST_BIND` | Set in `.env` | Use this machine's LAN IP, or `127.0.0.1` for local access only |
 | `OCTOCARTE_PORT` | `5274` | Subsonic/OpenSubsonic clients |
 | `ALACARTE_PORT` | `7373` | ALACarte administration |
 
@@ -49,5 +49,4 @@ allows it to manage its wrapper and grants control of the Docker host. The shim
 and wrapper publish no host ports.
 
 For connection errors, check `docker compose ps -a`, the Navidrome URL, and the
-host's firewall. Private-image authentication is covered in the
-[private preview guide](development/PRIVATE_PREVIEW.md).
+host's firewall.

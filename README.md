@@ -1,24 +1,40 @@
 # Octocarte
 
-Apple Music discovery for your Navidrome library.
+---
 
-Search artists, albums and songs from your usual Subsonic app. Play something
-new and Octocarte starts a YouTube stream while ALACarte downloads the whole
-album. Once Navidrome scans it, your local lossless tracks take over.
+Apple Music discovery and album downloads for your Navidrome library, built on
+[Octo-Fiesta](https://github.com/V1ck3s/octo-fiesta),
+[ALACarte](https://github.com/sosjalapeno/alacarte) and
+[Octo](https://github.com/winters27/octo).
 
-- Artist photos, discographies and top songs.
-- Whole-album downloads in ALAC or lossless FLAC, with artwork and lyrics.
-- Your existing Navidrome library and login.
+**Note: An Apple Music subscription is required.**
 
-## Requirements
+**Features**
 
-- An existing Navidrome server and access to its music folder.
-- A Linux x86-64 host with Docker and Docker Compose v2 or newer.
-- An Apple Music subscription.
+---
 
-## Install
+- **Apple Music search:** Search Apple Music's artists, albums and songs alongside your local library from your usual Subsonic client, using ALACarte's catalog search and Octo-Fiesta's client support.
+- **Artist pages:** Browse artist photos, discographies and Apple-ranked top songs. Octocarte's ALACarte integration includes these automatically, with no extra extensions to install.
+- **Listen while downloading:** Play a song you don't have yet and a temporary YouTube stream starts while ALACarte downloads its whole album in the background. Playback uses the streaming system adapted from Octo, including seeking support. The temporary stream is AAC/M4A, not lossless.
+- **Lossless albums:** ALACarte downloads complete albums in ALAC or lossless FLAC, with artwork, metadata and optional lyrics. Choose your quality and other download preferences in its web UI.
+- **Local playback takes over:** After ALACarte triggers a Navidrome scan, Octocarte matches the downloaded tracks to your library. Later searches and playback use the local lossless files.
+- **Library-aware downloads:** ALACarte reuses queued album jobs, skips albums already in your library and downloads only missing tracks from partially downloaded albums.
 
-Current images are private. [Sign in to GitHub first](docs/development/PRIVATE_PREVIEW.md).
+**Disclaimer**
+
+---
+
+**Octocarte is intended for personal archival use.** Downloading through third-party
+tools may violate [Apple's Terms of Service](https://www.apple.com/legal/internet-services/itunes/),
+even with a subscription. You are responsible for following applicable service
+terms and the laws in your jurisdiction.
+
+**Quick start**
+
+---
+
+Requires an existing Navidrome server and a Linux x86-64 host with Docker and
+Docker Compose v2 or newer.
 
 ```sh
 git clone https://github.com/Vixxy0w0/Octocarte.git
@@ -27,49 +43,38 @@ cp .env.example .env
 nano .env
 ```
 
-Set these three values in `.env`:
+In `.env`, replace `<navidrome-host>` with your Navidrome server's address and
+adjust its port if needed. Set `MUSIC_DIR` to the music folder on this machine
+that Navidrome reads. Replace `<octocarte-host-ip>` with the LAN IP of the machine
+running Octocarte. Both hosts can be the same machine.
 
 ```dotenv
-NAVIDROME_URL=http://192.168.1.100:4533
+NAVIDROME_URL=http://<navidrome-host>:4533
 MUSIC_DIR=/path/to/your/music
-HOST_BIND=192.168.1.100
+HOST_BIND=<octocarte-host-ip>
 ```
 
-Use your Navidrome address, your music folder and the LAN address of the machine
-running Octocarte. Navidrome must read the same files that ALACarte writes.
+Save the file, then start Octocarte:
 
 ```sh
 docker compose up -d
 ```
 
-1. Open **`http://YOUR_HOST:7373`** for ALACarte. Create its login, sign into Apple
-   and choose your download preferences. If it asks for a setup token, see
-   [first login](docs/SETUP.md#first-login).
-2. Enable Navidrome integration in ALACarte using your Navidrome address and scan
-   credentials.
-3. Point your music app at **`http://YOUR_HOST:5274`**, using your Navidrome login.
+Open `http://<octocarte-host-ip>:7373` for ALACarte. Grab the one-time setup token
+from `docker compose logs alacarte` and enter it on the welcome screen.
+See [first login](docs/SETUP.md#first-login) for help.
 
-Artist photos, top songs and service authentication are included automatically.
-Octocarte connects to your server; it does not install or manage Navidrome.
+Create your ALACarte login, sign into Apple and choose your download preferences.
+Enable Navidrome integration in ALACarte with your Navidrome address and scan
+credentials.
 
-## Good to know
+Point your Subsonic client to **`http://<octocarte-host-ip>:5274`** and use your
+existing Navidrome login. If using Caddy, point it at this address and port too.
 
-Temporary playback uses YouTube AAC/M4A. After download and scanning, playback
-uses your library's real format and quality. ALACarte handles download settings,
-lyrics, duplicate detection and partially downloaded albums.
+[Setup help](docs/SETUP.md) · [Updating and backups](docs/OPERATIONS.md) · [Client notes](docs/CLIENTS.md)
 
-Keep ALACarte's web UI on your trusted network; its Apple sign-in flow needs
-access to Docker. If using Caddy, point it at Octocarte's address and port.
+---
 
-**Status:** early alpha, tested end to end with Wavio. See [client notes](docs/CLIENTS.md)
-for known limitations. [Setup help](docs/SETUP.md) · [Updating and backups](docs/OPERATIONS.md)
-· [Migrating the earlier full-stack install](docs/MIGRATION.md).
-
-## Credits
-
-Built on [Octo-Fiesta](https://github.com/V1ck3s/octo-fiesta), with YouTube streaming
-adapted from [Octo](https://github.com/winters27/octo) and Apple Music provided by
-[ALACarte](https://github.com/sosjalapeno/alacarte).
-
-Octocarte is GPLv3 software. ALACarte remains a separate AGPLv3 service.
-See [LICENSE](LICENSE), [attribution](NOTICE.md) and [contributing](.github/CONTRIBUTING.md).
+Octocarte is licensed under [GPLv3](LICENSE). ALACarte runs as a separate
+[AGPLv3](integrations/alacarte/LICENSE) service. See [attribution](NOTICE.md)
+and [contributing](.github/CONTRIBUTING.md).
