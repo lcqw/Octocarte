@@ -84,4 +84,4 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v$RELEASE_VERSION" --verify-tag --draft --prerelease --title "Octocarte $RELEASE_VERSION" --notes-file "docs/releases/$RELEASE_VERSION.md" "$RUNNER_TEMP/octocarte-release/"*.tar.gz "$RUNNER_TEMP/octocarte-release/"*.json "$RUNNER_TEMP/octocarte-release/compose.yml" "$RUNNER_TEMP/octocarte-release/compose.existing-navidrome.yml" "$RUNNER_TEMP/octocarte-release/.env.example" "$RUNNER_TEMP/octocarte-release/images.env" "$RUNNER_TEMP/octocarte-release/SHA256SUMS"
+          gh release create "v$RELEASE_VERSION" --verify-tag --draft --prerelease --title "Octocarte $RELEASE_VERSION" --notes-file "docs/releases/$RELEASE_VERSION.md" "$RUNNER_TEMP/octocarte-release/"*.tar.gz "$RUNNER_TEMP/octocarte-release/"*.json "$RUNNER_TEMP/octocarte-release/compose.yml" "$RUNNER_TEMP/octocarte-release/compose.existing-navidrome.yml" "$RUNNER_TEMP/octocarte-release/env.example" "$RUNNER_TEMP/octocarte-release/images.env" "$RUNNER_TEMP/octocarte-release/SHA256SUMS"

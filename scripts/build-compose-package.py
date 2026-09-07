@@ -124,7 +124,9 @@ def main():
             manifest['images']['NAVIDROME_IMAGE'] = {'tag': navidrome, 'id': output('docker', 'image', 'inspect', navidrome, '--format', '{{.Id}}')}
             if args.release:
                 for name in ('compose.yml', 'compose.existing-navidrome.yml', '.env.example'):
-                    shutil.copy2(app / name, destination / name)
+                    # GitHub normalizes dot-prefixed asset names on upload.
+                    asset_name = 'env.example' if name == '.env.example' else name
+                    shutil.copy2(app / name, destination / asset_name)
                 # Compact source archive for release asset uploads.
                 with tarfile.open(destination / 'octocarte-source.tar.gz', 'w:gz') as tar:
                     tar.add(app, arcname='octocarte')
