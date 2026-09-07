@@ -86,6 +86,10 @@ def main():
                 'AGPL-3.0-only; see LICENSE. No warranty.\n'
                 'Octocarte revision: ' + revision + '\n'
                 'Upstream revision: ' + ALACARTE_REVISION + '\n')
+            # Upstream excludes LICENSE from Docker context; include only build legal artifacts.
+            dockerignore = alacarte / '.dockerignore'
+            dockerignore.write_text(dockerignore.read_text() +
+                                    '\n!LICENSE\n!OCTOCARTE-NOTICE.md\n!backend/octocarte-source.tar.gz\n')
             # Preserve the upstream build; use its lockfiles and pin resolved base images.
             web_dockerfile = alacarte / 'backend/Dockerfile'
             web_dockerfile.write_text(web_dockerfile.read_text().replace('npm install ', 'npm ci ') +
