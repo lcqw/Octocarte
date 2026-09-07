@@ -6,14 +6,16 @@ AAC/M4A while ALACarte acquires their whole parent album using its saved setting
 Once Navidrome indexes the files, local results and streams take precedence.
 
 **Status:** automated tests, live YouTube streaming and live whole-album ALAC
-acquisition pass. Real automatic scanning/local handoff and Wavio acceptance
-remain pending ALACarte's scan integration and shared-library configuration.
+acquisition pass. ALACarte also triggered a real Navidrome scan. Local handoff and Wavio acceptance
+remain pending shared-library configuration (Navidrome runs on a separate NAS).
 See [validation](docs/octocarte/VALIDATION.md).
 
 ## Start
 
 1. Keep your existing ALACarte and Navidrome services running. ALACarte owns all
-   Apple settings, credentials, library management and Navidrome scans.
+   Apple settings, credentials, library management and Navidrome scans. Its music
+   output must be visible to Navidrome: use the same shared storage when they run
+   on different machines. A scan cannot transfer files between hosts.
 2. Copy `.env.octocarte.example` to `.env.octocarte` and set the three connection
    values. A container cannot reach host ALACarte using `127.0.0.1`; use
    `http://host.docker.internal:7373` on this Linux host.

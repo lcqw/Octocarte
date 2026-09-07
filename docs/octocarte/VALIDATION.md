@@ -9,7 +9,7 @@
   metadata, nonblocking album submission, matching POST Origin, in-memory burst
   deduplication, HTTP ranges, local-result replacement and old-ID local playback.
 - Local search still succeeds when ALACarte returns HTTP 503.
-- GitHub CI passed at bd9055c. Later commits must also pass CI.
+- GitHub CI passed at 6e5626a, including the authenticated POST Origin fix.
 
 ## Live evidence (2026-09-07)
 
@@ -34,14 +34,19 @@ not included here or in Git. Octocarte runs on loopback port 5880.
 6. Resubmitting the completed album returned HTTP 409 and left one matching job,
    confirming ALACarte's library-aware no-op. Octocarte treats that as success.
 
+7. After the user enabled ALACarte's Navidrome integration, a second one-track
+   album (`1498647640`, Billie Eilish — No Time To Die - Single) completed as
+   ALAC in job `df1ccf81-381d-41f4-85aa-dd35cd355d70`. Temporary playback returned
+   HTTP 206 in 3.503 seconds, and ALACarte logged a successful automatic scan.
+
 ## Remaining acceptance
 
-The current ALACarte instance reports `navidromeEnabled: false`, the default
-Navidrome URL and no configured scan credentials. Therefore no automatic scan
-occurred and the selected track is not yet returned by the user's Navidrome.
-The user must configure this in ALACarte's own UI and ensure that its music
-output is visible to Navidrome. Octocarte must not take ownership of scanning.
+The user's Navidrome runs on a NAS and cannot access this machine's ALACarte
+output folder. No SMB/NFS share is currently mounted here. Scanning succeeds,
+but the NAS cannot index files it cannot see. Shared storage or a local validation
+Navidrome must be configured before the real local-track handoff can be tested.
 
-After that, validate the real scan/local handoff and Wavio playback/seeking.
-Fixture verification of the handoff is not a substitute for that live test.
-This MVP is not yet declared production-ready.
+Then validate local-ID replacement, native playback and Wavio seeking. Fixture
+verification of the handoff is not a substitute for that live test. This MVP is
+not yet declared production-ready. No further acquisitions should be started
+until the storage setup is selected.
