@@ -1,13 +1,13 @@
 # Unattended ALACarte authentication
 
-The [complete package](../../deploy/README.md) provisions this credential
+The [complete package](../../README.md) provisions this credential
 automatically. These details are for maintenance and existing-service migrations.
 The original Wavio-validated deployment used a cookie; its running services are
 not changed by building or merging the new package.
 
 ## Contract
 
-Apply `top-songs.patch`, then `service-auth.patch`, to ALACarte revision
+The image build applies `top-songs.patch`, then `service-auth.patch`, to ALACarte revision
 `ef9b677c21b024a0acbf4f88d47c4ebff24802fa`. The patches remain separate
 AGPL-3.0-only extensions to ALACarte. No Apple authentication or acquisition
 implementation is copied into Octocarte.
@@ -32,7 +32,11 @@ empty, malformed or unreadable files reject access. Rejected bearer tokens
 never fall back to a browser cookie. Already accepted requests can finish after
 revocation. Cached catalog metadata in Octocarte is not purged by revocation.
 
-## Provisioning
+## Manual provisioning for existing services
+
+The standard Compose installation creates and retains its token in the
+`integration-auth` named volume automatically. The steps below are only needed
+when connecting independently managed services.
 
 Generate a dedicated secret without printing its value:
 
