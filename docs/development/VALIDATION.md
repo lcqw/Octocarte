@@ -35,7 +35,8 @@ installation was not changed by repository cleanup. Long-term use remains ongoin
 
 Wavio prefetching can request lossy Opus for ALAC; disabling prefetching resolved
 that report. The user subsequently selected lossless FLAC in ALACarte. Navic
-playback had an unresolved compatibility report. See [client notes](../CLIENTS.md).
+playback was subsequently confirmed working after an earlier failed trial. See
+[client notes](../CLIENTS.md).
 
 ## Standalone cleanup candidate
 

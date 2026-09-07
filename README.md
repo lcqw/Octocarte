@@ -71,8 +71,9 @@ existing Navidrome login. If using Caddy, point it at this address and port too.
 | --- | --- |
 | [Wavio](https://github.com/Joel-Mercier/wavio) | Android; iOS (build from source) |
 | [Aonsoku](https://github.com/victoralvesf/aonsoku) | Linux, Windows, macOS |
+| [Navic](https://navic.app/) | Android, iOS |
 
-*Currently tested with Octocarte: Wavio on Android and Aonsoku on Linux.*
+The clients listed are ones directly tested and confirmed working with Octocarte. Other Subsonic compatible clients should work, but it isn't guaranteed
 
 ## License
 
