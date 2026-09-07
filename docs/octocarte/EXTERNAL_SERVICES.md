@@ -1,7 +1,7 @@
 # Connect existing services
 
 This advanced deployment runs only Octocarte and its YouTube shim. The
-[complete package](../../deploy/README.md) includes Navidrome and a prepared
+[complete package](../../README.md) includes Navidrome and a prepared
 ALACarte image with top songs and service authentication; choose that for a new installation.
 
 Stock ALACarte supports artist photos through its existing API. Apple-ranked top

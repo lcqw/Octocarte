@@ -39,6 +39,7 @@ jobs:
           OCTOCARTE_TEST_SERVICE_AUTH=1 python3 tests/http_mvp.py
           python3 tests/test_secret_file.py
           python3 tests/test_compose_package.py
+          python3 tests/test_simple_compose.py
 
   shim-tests:
     runs-on: ubuntu-latest

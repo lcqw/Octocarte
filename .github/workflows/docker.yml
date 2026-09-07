@@ -1,112 +1,87 @@
-name: Docker Build & Push
+name: Publish Octocarte prerelease
 
 on:
   workflow_dispatch:
 
-env:
-  DOTNET_VERSION: "9.0.x"
-  REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}
+permissions:
+  contents: read
+
+concurrency:
+  group: octocarte-release-${{ github.ref }}
+  cancel-in-progress: false
 
 jobs:
-  build-and-test:
+  release:
     runs-on: ubuntu-latest
-
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Restore dependencies
-        run: dotnet restore
-
-      - name: Build
-        run: dotnet build --configuration Release --no-restore
-
-      - name: Test
-        run: dotnet test --configuration Release --no-build --verbosity normal
-
-  docker:
-    needs: build-and-test
-    runs-on: ubuntu-latest
-
     permissions:
-      contents: read
+      contents: write
       packages: write
-
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-
-      - name: Set up QEMU
-        uses: docker/setup-qemu-action@v3
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
-
-      - name: Login to GitHub Container Registry
+      - name: Validate Octocarte release tag
+        env:
+          RELEASE_REF: ${{ github.ref }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          version = pathlib.Path('VERSION').read_text().strip()
+          if not re.fullmatch(r'0\.0\.5-alpha\.[1-9][0-9]*', version):
+              raise SystemExit('This workflow currently publishes the 0.0.5 alpha series only.')
+          if os.environ['RELEASE_REF'] != 'refs/tags/v' + version:
+              raise SystemExit('Run this workflow on the matching immutable release tag.')
+          with open(os.environ['GITHUB_ENV'], 'a') as env:
+              env.write('RELEASE_VERSION=' + version + '\n')
+              env.write('REGISTRY_PREFIX=ghcr.io/' + os.environ['GITHUB_REPOSITORY_OWNER'].lower() + '\n')
+          PY
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '9.0.x'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Test application and initialization
+        run: |
+          dotnet test --configuration Release
+          python3 tests/test_compose_package.py
+          python3 tests/test_simple_compose.py
+      - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
         with:
-          registry: ${{ env.REGISTRY }}
+          registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
-          tags: |
-            type=ref,event=branch
-            type=ref,event=tag
-            type=sha,prefix=
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/master' }}
-            type=raw,value=dev,enable=${{ github.ref == 'refs/heads/dev' }}
-
-      - name: Extract version from tag
-        id: version
+      - name: Refuse to replace existing release images
         run: |
-          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
-            # Tag release: v0.4.0 -> 0.4.0
-            VERSION=${GITHUB_REF#refs/tags/v}
-          elif [[ "${{ github.ref }}" == refs/heads/dev ]]; then
-            # Dev branch: pre-release of the next minor after the newest tag.
-            # Release tags live on master merge commits, so they are descendants
-            # of dev and git describe can never reach them from here.
-            git fetch --tags
-            LATEST_TAG=$(git tag --list 'v*' --sort=-v:refname | head -n1)
-            LATEST_TAG=${LATEST_TAG:-v0.0}
-            # v0.10 -> 0.11.0-dev.37+g1a2b3c4
-            NEXT=$(echo "${LATEST_TAG#v}" | awk -F. '{printf "%d.%d.0", $1, $2 + 1}')
-            COMMITS=$(git rev-list --count "${LATEST_TAG}..HEAD" 2>/dev/null || echo 0)
-            HASH=g$(git rev-parse --short HEAD)
-            VERSION="${NEXT}-dev.${COMMITS}+${HASH}"
-          elif [[ "${{ github.ref }}" == refs/heads/master ]]; then
-            # Master branch: get latest tag
-            git fetch --tags
-            LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
-            VERSION="${LATEST_TAG#v}"
-          else
-            # Other branches (PR, etc.)
-            VERSION="0.0.0-dev"
-          fi
-          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
-
-      - name: Build and push
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          platforms: linux/amd64,linux/arm64
-          push: true
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
-          build-args: |
-            VERSION=${{ steps.version.outputs.VERSION }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          for image in octocarte octocarte-shim octocarte-alacarte octocarte-wrapper octocarte-init; do
+            if docker manifest inspect "$REGISTRY_PREFIX/$image:$RELEASE_VERSION" >/dev/null 2>&1; then
+              echo "Release image already exists; use a new release version."
+              exit 1
+            fi
+          done
+      - name: Build pinned source and prepare release artifacts
+        run: |
+          python3 scripts/build-compose-package.py --release --registry-prefix "$REGISTRY_PREFIX" --version "$RELEASE_VERSION" --output "$RUNNER_TEMP/octocarte-release"
+      - name: Test both installation paths and the stream contract
+        env:
+          OCTOCARTE_TEST_SERVICE_AUTH: '1'
+        run: |
+          OCTOCARTE_TEST_IMAGE="$REGISTRY_PREFIX/octocarte:$RELEASE_VERSION" python3 tests/http_mvp.py
+          python3 tests/simple_compose_smoke.py --image-base "$REGISTRY_PREFIX/octocarte" --version "$RELEASE_VERSION" --mode full
+          python3 tests/simple_compose_smoke.py --image-base "$REGISTRY_PREFIX/octocarte" --version "$RELEASE_VERSION" --mode existing
+      - name: Publish tested images and record registry digests
+        run: |
+          python3 scripts/publish-release-images.py "$RUNNER_TEMP/octocarte-release"
+      - name: Pull back the published images and verify startup
+        run: |
+          for image in octocarte octocarte-shim octocarte-alacarte octocarte-wrapper octocarte-init; do
+            docker image rm "$REGISTRY_PREFIX/$image:$RELEASE_VERSION"
+            docker pull "$REGISTRY_PREFIX/$image:$RELEASE_VERSION"
+          done
+          python3 tests/simple_compose_smoke.py --image-base "$REGISTRY_PREFIX/octocarte" --version "$RELEASE_VERSION" --mode full
+      - name: Create a draft prerelease
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release create "v$RELEASE_VERSION" --verify-tag --draft --prerelease --title "Octocarte $RELEASE_VERSION" --notes-file "docs/releases/$RELEASE_VERSION.md" "$RUNNER_TEMP/octocarte-release/"*.tar.gz "$RUNNER_TEMP/octocarte-release/"*.json "$RUNNER_TEMP/octocarte-release/compose.yml" "$RUNNER_TEMP/octocarte-release/compose.existing-navidrome.yml" "$RUNNER_TEMP/octocarte-release/.env.example" "$RUNNER_TEMP/octocarte-release/images.env" "$RUNNER_TEMP/octocarte-release/SHA256SUMS"

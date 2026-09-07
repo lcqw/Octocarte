@@ -88,8 +88,12 @@ Icon[]
 secrets/
 .env.*
 !.env.example
+!.env.upstream.example
 !.env.octocarte.example
 __pycache__/
 .pytest_cache/
 .venv/
 alacarte-session-cookie
+
+# Octocarte release notes
+!docs/releases/

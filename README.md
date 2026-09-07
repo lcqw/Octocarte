@@ -1,104 +1,97 @@
 # Octocarte
 
-Navidrome/OpenSubsonic proxy built on Octo-Fiesta. Apple catalog metadata
-comes from the separate ALACarte service. Unowned tracks play temporary YouTube
-AAC/M4A while ALACarte acquires their whole parent album using its saved settings.
-Once Navidrome indexes the files, local results and streams take precedence.
+Octocarte connects a Subsonic/OpenSubsonic music client to Navidrome and ALACarte.
+Search Apple's catalog, play an unowned track through temporary YouTube AAC/M4A,
+and let ALACarte acquire its whole album in the background. Once Navidrome indexes
+the files, local tracks take precedence.
 
-**Status:** the full backend workflow passed with real services, including native
-ALAC acquisition, an ALACarte-initiated local Navidrome scan, local replacement
-and subsequent native playback/seeking. Wavio phone acceptance passed, including
-artist photos/top songs and unowned playback. Entergalactic completed as a full
-15-track native ALAC album. Temporary local validation services were cleaned up.
-The complete Compose package also passed fresh-install and restart checks; the
-NAS daily-use trial remains outstanding. See [workflow validation](docs/octocarte/VALIDATION.md)
-and [package validation](deploy/VALIDATION.md).
+Artist photos, ranked top songs and unattended service authentication are included.
+ALACarte owns Apple sign-in, download preferences, metadata, lyrics, artwork,
+library management and Navidrome scans.
+
+**Status:** `0.0.5-alpha.1` is an early prerelease. The NAS end-to-end workflow has
+passed user acceptance; long-term daily-use testing is ongoing. This repository
+and its images remain private during preparation. Authorized testers need
+[private registry access](docs/octocarte/PRIVATE_PREVIEW.md); no public availability
+is implied by the examples below.
 
 ## Install
 
-The [complete Compose package](deploy/README.md) is the standard installation.
-It includes Octocarte, Navidrome, the YouTube shim, and ALACarte with its wrapper.
-**Artist photos, Apple-ranked top songs, and unattended service authentication
-are included.** No manual extension installation or browser-cookie copying is
-required. The package generates a private integration token during initialization.
-
-For the private NAS preview, a build helper prepares the images and a transferable
-bundle. Install that bundle on the Docker host, choose the shared music folder,
-and complete the normal Navidrome and ALACarte account setup in their UIs.
-Public container images are not published yet. See the [installation steps](deploy/README.md).
-
-ALACarte remains a separate service inside the same Compose project and owns
-Apple credentials, preferences, acquisition, library management and scans.
-Its music output and Navidrome's library mount point to the same host folder.
-Clients connect to Octocarte using their Navidrome account.
-
-Already running both services? The [external-service setup](docs/octocarte/EXTERNAL_SERVICES.md)
-is retained for that use case; stock ALACarte has fewer integration capabilities.
-
-## Behavior and boundaries
-
-- Requests to `POST /api/download` contain only `albumId`. No quality, lyrics,
-  storefront, artwork or other preference overrides are sent.
-- ALACarte owns persistent deduplication and partial-album completion. HTTP 409
-  is a normal no-op. Octocarte only coalesces in-flight song requests and debounces
-  albums for 30 seconds in memory. Restarting clears this guard; ALACarte still
-  decides whether work is needed.
-- Album work runs in a bounded hosted queue independently of client disconnects.
-  Failed submissions can retry on a later play. There is no new durable job store.
-- Temporary metadata is `m4a` / `audio/mp4`, codec AAC, with unknown bitrate/size
-  represented as zero in song metadata. It does not claim ALAC or Hi-Res quality.
-  Navidrome's real metadata is preserved when local tracks replace placeholders.
-- Range, 206, 416 and Content-Range pass through the resolver and stream response.
-- Soulseek/slskd and the shim's permanent `/download` endpoint are not included.
-  External playlist acquisition and starring-to-download are outside this MVP.
-- The original chassis supports other providers, but Octocarte selects ALACarte
-  by default. Its legacy download implementations are not used for Apple tracks.
-
-Artist photos use ALACarte artist detail and standard Subsonic image responses.
-Ranked artist top songs are included through the prepared ALACarte image.
-The [integration notes](integrations/alacarte/README.md) describe the small maintained patches for contributors.
-Apple ranking is retained while matching native Navidrome tracks take precedence.
-
-## Verify
+Requires an AMD64 Linux Docker host with Docker Compose v2 or newer, an existing
+music folder, and an Apple account suitable for your ALACarte setup.
 
 ```sh
-dotnet test octo-fiesta.sln
-python -m pytest yt-dlp-shim/tests -q
-docker build -t octocarte:mvp .
-python3 tests/http_mvp.py
+git clone https://github.com/Vixxy0w0/Octocarte.git
+cd Octocarte
+cp .env.example .env
+nano .env
+docker compose up -d
 ```
 
-The Python suite needs Flask, requests and pytest. The .NET suite needs an
-ASP.NET 9 runtime, available in the SDK container if missing on the host.
-`http_mvp.py` uses disposable containers and controlled fixtures. It does not
-prove real Apple downloads, scanning, codecs on disk, or Wavio seeking.
+Set `MUSIC_DIR` to your music folder's absolute path. Set `HOST_BIND` to your NAS's
+private LAN address if connecting from another device. The other settings have
+defaults. Compose downloads the versioned images and initializes service storage
+and authentication automatically.
 
-Live acceptance: search in Wavio → play an unowned result → observe prompt
-YouTube playback and one whole-album ALACarte job → let ALACarte finish and scan
-→ repeat search/play and verify the real Navidrome ID and native metadata.
-Do not change the already validated ALACarte preferences for this test.
+Then finish account setup:
 
-If using Caddy, point the reverse proxy at Octocarte's address and published port,
-rather than Navidrome. On a shared Docker network, its address is `octocarte:8080`.
+1. Open `http://HOST:4533` and create your Navidrome account.
+2. Open `http://HOST:7373`, create an ALACarte UI login, sign into Apple and save
+   your download/lyrics preferences. ALAC or lossless FLAC output is your choice.
+3. In ALACarte, enable Navidrome integration with `http://navidrome:4533` and that
+   server's scan credentials.
+4. Connect Wavio or another client to `http://HOST:5274` using your Navidrome login.
 
-## Provider scope
+The initializer showing **Exited (0)** is normal: it finishes its job and stops.
+The wrapper may stop until Apple sign-in is completed in ALACarte.
 
-The supported Octocarte workflow is ALACarte catalog/acquisition with YouTube
-playback until Navidrome indexes the native files. Deezer, Qobuz, Tidal, Yandex
-and SquidWTF implementations remain from Octo-Fiesta, but have not received
-Octocarte end-to-end acceptance testing. Their presence is not a compatibility
-guarantee. External playlists and legacy acquisition behavior are outside the
-validated Octocarte workflow.
+Already running Navidrome? Use the [existing-Navidrome example](docs/octocarte/EXISTING_NAVIDROME.md)
+to add Octocarte to its Compose project. On UGOS, the same Compose file and `.env`
+values can be supplied through the Docker project UI.
 
-## Development
+If using Caddy, point it at Octocarte's address and port instead of Navidrome
+(`octocarte:8080` on a shared Docker network).
 
-Changes use focused branches and pull requests against `dev`. The validated
-baseline is tagged `mvp-validated-2026-09-07`. See [CONTRIBUTING.md](CONTRIBUTING.md)
-for validation and release expectations. The repository remains private during
-NAS stabilization; public release and image publication are separate decisions.
+## Storage and operation
 
-## Sources
+ALACarte writes to `MUSIC_DIR`; Navidrome reads the same folder. Ensure its
+container user can read that folder. The default Navidrome user/group is
+`1000:10`; advanced installations can set `NAVIDROME_UID` and `NAVIDROME_GID`.
 
-See [NOTICE.OCTOCARTE.md](NOTICE.OCTOCARTE.md), [LICENSE](LICENSE), and the original
-[Octo-Fiesta README](README.UPSTREAM.md). `origin` is the private Octocarte repository;
-`upstream` is V1ck3s/octo-fiesta. GitHub container publishing is manual-only.
+Docker-managed volumes hold service databases, Apple login state and the private
+integration token. `docker compose down` retains them. **Do not add `--volumes`
+unless you intend to delete that service state.** Back up the volumes and music
+before upgrades. See [operations](docs/octocarte/OPERATIONS.md).
+
+ALACarte's administration UI belongs on a trusted network: its existing Apple
+sign-in flow needs the Docker socket to manage its wrapper. ALACarte expects one
+`alacarte-wrapper` container per host. The shim and wrapper publish no host ports.
+
+## Behavior and compatibility
+
+- Temporary external results describe AAC/M4A, never ALAC or Hi-Res. Indexed
+  tracks use Navidrome's native metadata and normal client-requested transcoding.
+- Album submission runs independently of playback. ALACarte handles persistent
+  duplicate detection and partial-album completion; Octocarte uses a short
+  in-memory guard and treats already-present albums as a normal no-op.
+- Apple lyrics credentials and account renewal remain under ALACarte's control.
+  The separate integration token has no scheduled expiration.
+- Wavio's Android prefetching can request lossy Opus for ALAC. Disabling prefetching
+  resolved that behavior in the NAS trial; FLAC is another lossless compatibility
+  option. See [client notes](docs/octocarte/CLIENTS.md).
+- Soulseek/slskd is not included. External playlist acquisition is outside this
+  release. Inherited Deezer, Qobuz, Tidal, Yandex and SquidWTF code remains, but
+  those providers have not received Octocarte end-to-end acceptance testing.
+
+## Development and attribution
+
+See [CONTRIBUTING.md](CONTRIBUTING.md), [workflow validation](docs/octocarte/VALIDATION.md),
+[deployment validation](deploy/VALIDATION.md) and [release notes](docs/releases/0.0.5-alpha.1.md).
+Changes use branches and pull requests. The validated baseline is preserved at
+`mvp-validated-2026-09-07`.
+
+Octocarte derives from Octo-Fiesta and adapts YouTube streaming components from
+Octo. ALACarte stays a separate service with small maintained integration patches.
+See [NOTICE.OCTOCARTE.md](NOTICE.OCTOCARTE.md), [LICENSE](LICENSE), the
+[ALACarte integration](integrations/alacarte/README.md), and the preserved
+[upstream README](README.UPSTREAM.md).

@@ -1,6 +1,6 @@
 # ALACarte integration
 
-The standard [Octocarte Compose package](../../deploy/README.md) includes a prepared
+The standard [Octocarte Compose package](../../README.md) includes a prepared
 ALACarte image. Artist photos and Apple-ranked top songs work after normal setup;
 users do not apply patches or copy session cookies. This directory records the
 source changes used to build that image, for maintenance and attribution.

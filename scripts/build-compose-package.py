@@ -3,6 +3,7 @@
 import argparse
 import hashlib
 import json
+import os
 from pathlib import Path
 import re
 import shutil
@@ -43,11 +44,18 @@ def main():
     parser.add_argument('--output', type=Path, required=True, help='new directory outside the checkout')
     parser.add_argument('--version', required=True, help='unique candidate version, e.g. nas-preview.1')
     parser.add_argument('--alacarte-source', type=Path, help='reuse a local Git object database (read-only)')
+    parser.add_argument('--release', action='store_true', help='prepare registry release artifacts instead of an image archive')
+    parser.add_argument('--registry-prefix', default='', help='registry namespace, e.g. ghcr.io/owner')
     args = parser.parse_args()
+    if args.registry_prefix and not re.fullmatch(r'[a-z0-9][a-z0-9./_-]*', args.registry_prefix):
+        parser.error('invalid registry prefix')
+    prefix = args.registry_prefix.rstrip('/') + '/' if args.registry_prefix else ''
     if not re.fullmatch(r'[a-z0-9][a-z0-9_.-]{0,63}', args.version):
         parser.error('version must be a lowercase Docker tag')
-    for name in ('octocarte', 'octocarte-shim', 'octocarte-alacarte', 'octocarte-wrapper'):
-        if subprocess.run(['docker', 'image', 'inspect', name + ':' + args.version],
+    names = ['octocarte', 'octocarte-shim', 'octocarte-alacarte', 'octocarte-wrapper']
+    if args.release: names.append('octocarte-init')
+    for name in names:
+        if subprocess.run(['docker', 'image', 'inspect', prefix + name + ':' + args.version],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
             parser.error('candidate version already exists; choose a new version to retain previous images')
     destination = args.output.resolve()
@@ -78,6 +86,7 @@ def main():
             web_dockerfile.write_text(web_dockerfile.read_text().replace('npm install ', 'npm ci '))
             dockerfiles = [app / 'Dockerfile', app / 'yt-dlp-shim/Dockerfile',
                            web_dockerfile, alacarte / 'wrapper/Dockerfile']
+            if args.release: dockerfiles.append(app / 'deploy/bootstrap/Dockerfile')
             for dockerfile in dockerfiles:
                 text = dockerfile.read_text()
                 for base in re.findall(r'^FROM (\S+)', text, flags=re.MULTILINE):
@@ -99,26 +108,41 @@ def main():
                 ('ALACARTE_IMAGE', 'octocarte-alacarte', alacarte, web_dockerfile),
                 ('WRAPPER_IMAGE', 'octocarte-wrapper', alacarte / 'wrapper', alacarte / 'wrapper/Dockerfile'),
             ]
+            if args.release:
+                builds.append(('INIT_IMAGE', 'octocarte-init', app, app / 'deploy/bootstrap/Dockerfile'))
             for key, name, context, dockerfile in builds:
-                tag = name + ':' + args.version
-                run('docker', 'build', '--platform', 'linux/amd64', '-t', tag, '-f', str(dockerfile), str(context))
+                tag = prefix + name + ':' + args.version
+                run('docker', 'build', '--platform', 'linux/amd64', '-t', tag,
+                    '--build-arg', 'VERSION=' + args.version,
+                    '--label', 'org.opencontainers.image.source=https://github.com/' + os.environ.get('GITHUB_REPOSITORY', 'Vixxy0w0/Octocarte'),
+                    '--label', 'org.opencontainers.image.revision=' + revision,
+                    '--label', 'org.opencontainers.image.version=' + args.version,
+                    '-f', str(dockerfile), str(context))
                 manifest['images'][key] = {'tag': tag, 'id': output('docker', 'image', 'inspect', tag, '--format', '{{.Id}}')}
             navidrome = 'deluan/navidrome:0.63.2'
             run('docker', 'pull', '--platform', 'linux/amd64', navidrome)
             manifest['images']['NAVIDROME_IMAGE'] = {'tag': navidrome, 'id': output('docker', 'image', 'inspect', navidrome, '--format', '{{.Id}}')}
-            for item in (app / 'deploy').iterdir():
-                if item.is_file() and item.name != 'IMPLEMENTATION_PLAN.md':
-                    shutil.copy2(item, destination / item.name)
-            (destination / 'manage.sh').chmod(0o755)
+            if args.release:
+                for name in ('compose.yml', 'compose.existing-navidrome.yml', '.env.example'):
+                    shutil.copy2(app / name, destination / name)
+                # Compact source archive for release asset uploads.
+                with tarfile.open(destination / 'octocarte-source.tar.gz', 'w:gz') as tar:
+                    tar.add(app, arcname='octocarte')
+                (destination / 'octocarte-source.tar').unlink()
+            else:
+                for item in (app / 'deploy').iterdir():
+                    if item.is_file() and item.name != 'IMPLEMENTATION_PLAN.md':
+                        shutil.copy2(item, destination / item.name)
+                (destination / 'manage.sh').chmod(0o755)
+                run('docker', 'save', '-o', str(destination / 'images.tar'), *(v['tag'] for v in manifest['images'].values()))
             write_image_environment(destination / 'images.env', manifest['images'])
             (destination / 'images.lock.json').write_text(json.dumps(manifest, indent=2) + '\n')
-            run('docker', 'save', '-o', str(destination / 'images.tar'), *(v['tag'] for v in manifest['images'].values()))
             checksums = []
-            for path in sorted(destination.iterdir()):
+            for path in sorted(destination.rglob('*')):
                 if path.is_file():
                     with path.open('rb') as file:
                         digest = hashlib.file_digest(file, 'sha256').hexdigest()
-                    checksums.append(digest + '  ' + path.name + '\n')
+                    checksums.append(digest + '  ' + path.relative_to(destination).as_posix() + '\n')
             (destination / 'SHA256SUMS').write_text(''.join(checksums))
         print('Package built. No services started and no images published.')
     except Exception:

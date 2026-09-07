@@ -12,7 +12,7 @@ in Git history. See LICENSE for the complete license text.
 No Apple authentication, decryption, downloading, tagging, lyrics or library
 management implementation is incorporated from it.
 
-An optional ALACarte catalog endpoint patch is distributed separately under
-ALACarte's AGPL-3.0-only license in `integrations/alacarte`, with its full license
-and attribution. It extends the separate service and is not compiled into
+The prepared ALACarte image includes maintained catalog, service-authentication
+and wrapper-image selection patches under ALACarte's AGPL-3.0-only license in
+`integrations/alacarte`, with its full license and attribution. It extends the separate service and is not compiled into
 Octocarte. Apple authentication and acquisition remain owned by ALACarte.

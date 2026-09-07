@@ -1,0 +1,148 @@
+name: octocarte
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
+services:
+  initialize:
+    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/vixxy0w0/octocarte}-init:${OCTOCARTE_VERSION:-0.0.5-alpha.1}
+    restart: "no"
+    network_mode: none
+    logging: *logging
+    environment:
+      NAVIDROME_UID: ${NAVIDROME_UID:-1000}
+      NAVIDROME_GID: ${NAVIDROME_GID:-10}
+      NAVIDROME_DATA_DIR: /navidrome
+    volumes:
+      - integration-auth:/auth
+      - navidrome-data:/navidrome
+
+  navidrome:
+    image: deluan/navidrome:0.63.2
+    user: "${NAVIDROME_UID:-1000}:${NAVIDROME_GID:-10}"
+    restart: unless-stopped
+    logging: *logging
+    ports:
+      - "${HOST_BIND:-127.0.0.1}:${NAVIDROME_PORT:-4533}:4533"
+    environment:
+      ND_LOGLEVEL: info
+      ND_ENABLEINSIGHTSCOLLECTOR: "false"
+    volumes:
+      - navidrome-data:/data
+      - type: bind
+        source: ${MUSIC_DIR:?Set MUSIC_DIR in .env to an existing absolute music-folder path}
+        target: /music
+        read_only: true
+        bind: {create_host_path: false}
+    depends_on:
+      initialize: {condition: service_completed_successfully}
+
+  octocarte:
+    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/vixxy0w0/octocarte}:${OCTOCARTE_VERSION:-0.0.5-alpha.1}
+    restart: unless-stopped
+    logging: *logging
+    ports:
+      - "${HOST_BIND:-127.0.0.1}:${OCTOCARTE_PORT:-5274}:8080"
+    environment:
+      Subsonic__MusicService: Alacarte
+      Subsonic__Url: ${NAVIDROME_URL:-http://navidrome:4533}
+      Subsonic__EnableExternalPlaylists: "false"
+      Subsonic__AutoUpgradeQuality: "false"
+      Alacarte__Url: http://alacarte:7373
+      Alacarte__ServiceTokenFile: /run/octocarte-auth/token
+      YouTube__ShimUrl: http://yt-dlp-shim:8080
+      Library__DownloadPath: /app/state
+    volumes:
+      - octocarte-state:/app/state
+      - integration-auth:/run/octocarte-auth:ro
+    depends_on:
+      initialize: {condition: service_completed_successfully}
+      alacarte: {condition: service_healthy}
+      yt-dlp-shim: {condition: service_healthy}
+
+  yt-dlp-shim:
+    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/vixxy0w0/octocarte}-shim:${OCTOCARTE_VERSION:-0.0.5-alpha.1}
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      YTDLP_AUDIO_FORMAT: "140/bestaudio[ext=m4a][acodec^=mp4a]"
+      XDG_CACHE_HOME: /cache
+    volumes:
+      - ytdlp-cache:/cache
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  alacarte:
+    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/vixxy0w0/octocarte}-alacarte:${OCTOCARTE_VERSION:-0.0.5-alpha.1}
+    platform: linux/amd64
+    restart: unless-stopped
+    logging: *logging
+    ports:
+      - "${HOST_BIND:-127.0.0.1}:${ALACARTE_PORT:-7373}:7373"
+    environment:
+      PORT: "7373"
+      AMDL_WRAPPER_HOST: alacarte-wrapper
+      AMDL_WRAPPER_IMAGE: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/vixxy0w0/octocarte}-wrapper:${OCTOCARTE_VERSION:-0.0.5-alpha.1}
+      AMDL_WRAPPER_DECRYPT_PORT: "10020"
+      AMDL_WRAPPER_M3U8_PORT: "20020"
+      AMDL_WRAPPER_ACCOUNT_PORT: "30020"
+      AMDL_MUSIC_PATH: /music
+      AMDL_CONFIG_DIR: /config
+      OCTOCARTE_TOKEN_FILE: /run/octocarte-auth/token
+      AUTH_DISABLED: "false"
+      TRUST_PROXY: loopback
+    volumes:
+      - alacarte-data:/config
+      - wrapper-data:/wrapper-data
+      - integration-auth:/run/octocarte-auth:ro
+      - type: bind
+        source: ${MUSIC_DIR:?Set MUSIC_DIR in .env}
+        target: /music
+        bind: {create_host_path: false}
+      # ALACarte's existing Apple sign-in UI manages its wrapper through Docker.
+      - type: bind
+        source: ${CONTAINER_SOCKET:-/var/run/docker.sock}
+        target: /var/run/docker.sock
+        bind: {create_host_path: false}
+    depends_on:
+      initialize: {condition: service_completed_successfully}
+      wrapper: {condition: service_started}
+    healthcheck:
+      test: [CMD, node, -e, "fetch('http://127.0.0.1:7373/api/auth/state').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  wrapper:
+    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/vixxy0w0/octocarte}-wrapper:${OCTOCARTE_VERSION:-0.0.5-alpha.1}
+    # Required by ALACarte's existing sign-in flow: one installation per host.
+    container_name: alacarte-wrapper
+    platform: linux/amd64
+    restart: on-failure
+    logging: *logging
+    entrypoint: [/app/wrapper-entrypoint.sh]
+    command: [-H, 0.0.0.0]
+    environment:
+      LD_PRELOAD: /app/libwrapper_login_fix.so
+    volumes:
+      - wrapper-data:/app/rootfs/data
+      - /dev/null:/app/rootfs/dev/null
+      - /dev/urandom:/app/rootfs/dev/urandom
+      - /dev/random:/app/rootfs/dev/random
+      - /dev/zero:/app/rootfs/dev/zero
+
+volumes:
+  navidrome-data:
+  octocarte-state:
+  alacarte-data:
+  wrapper-data:
+  integration-auth:
+  ytdlp-cache:

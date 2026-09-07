@@ -1,4 +1,8 @@
-# Complete Compose installation
+# Legacy offline NAS bundle
+
+For new installations, use the [standard Compose setup](../README.md). This page
+documents the offline bundle used for the first NAS trial. Existing bundle users
+can keep running it; see [operations](../docs/octocarte/OPERATIONS.md) before migrating.
 
 This package includes **artist photos, Apple-ranked top songs and unattended
 Octocarte-to-ALACarte authentication**. It runs five services in one Compose
@@ -6,8 +10,8 @@ project: Octocarte, Navidrome, the YouTube shim, ALACarte and its wrapper. Users
 complete normal account setup; no extensions need to be installed afterward.
 
 Status: private NAS preview. The earlier Wavio workflow is validated; this
-deployment passed a fresh isolated Compose check and still needs the NAS daily-use
-trial. See [package validation](VALIDATION.md). Public images are not published.
+deployment passed an isolated Compose check and the user reported a successful
+NAS end-to-end trial. See [package validation](VALIDATION.md). Public images are not published.
 The package carries exact local images and their source so the NAS can load them
 without Git, Python or a compiler. It targets Linux AMD64 because the upstream
 ALACarte downloader and wrapper require it.
