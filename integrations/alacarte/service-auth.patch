@@ -1,0 +1,194 @@
+diff --git a/backend/lib/requireAuth.mjs b/backend/lib/requireAuth.mjs
+index 33bd517..5cb7542 100644
+--- a/backend/lib/requireAuth.mjs
++++ b/backend/lib/requireAuth.mjs
+@@ -1,3 +1,4 @@
++import { authorizeIntegration } from './integrationAuth.mjs'
+ import {
+   getSessionVersion,
+   isPasswordSet,
+@@ -41,6 +42,13 @@ const ALWAYS_PUBLIC = new Set([
+ 
+ export function requireAuth() {
+   return async (req, res, next) => {
++    const integration = await authorizeIntegration(req)
++    if (integration !== null) {
++      if (integration !== 200)
++        return res.status(integration).json({ error: integration === 401 ? 'unauthorized' : 'forbidden' })
++      req.integration = 'octocarte'
++      return next()
++    }
+     if (AUTH_DISABLED) return next()
+     if (!req.path.startsWith('/api/')) return next()
+     if (ALWAYS_PUBLIC.has(req.path)) return next()
+diff --git a/backend/lib/integrationAuth.mjs b/backend/lib/integrationAuth.mjs
+new file mode 100644
+index 0000000..bf82a85
+--- /dev/null
++++ b/backend/lib/integrationAuth.mjs
+@@ -0,0 +1,42 @@
++// SPDX-License-Identifier: AGPL-3.0-only
++import crypto from 'node:crypto'
++import fs from 'node:fs/promises'
++
++// One deployment-owned token, supplied as a secret file. Reading it per request
++// permits rotation/revocation without retaining an accepted token in memory.
++const TOKEN_PATTERN = /^[A-Za-z0-9_-]{43}$/
++
++function permits(req) {
++  if (req.method === 'GET') {
++    return req.path === '/api/search'
++      || /^\/api\/album\/\d+$/.test(req.path)
++      || /^\/api\/artist\/\d+(?:\/top-songs)?$/.test(req.path)
++  }
++  if (req.method !== 'POST' || req.path !== '/api/download') return false
++  const body = req.body
++  return body && typeof body === 'object' && !Array.isArray(body)
++    && Object.keys(body).length === 1
++    && typeof body.albumId === 'string' && /^\d+$/.test(body.albumId)
++}
++
++// Null leaves normal browser/session authentication unchanged.
++export async function authorizeIntegration(req, tokenFile = process.env.OCTOCARTE_TOKEN_FILE) {
++  const header = req.headers.authorization
++  if (typeof header !== 'string' || !/^Bearer(?:\s|$)/i.test(header)) return null
++  const match = /^Bearer ([A-Za-z0-9_-]{43})$/i.exec(header)
++  if (!match || !tokenFile) return 401
++  let expected
++  try {
++    // Keep reads bounded even if an invalid file is mounted by mistake.
++    const file = await fs.open(tokenFile, 'r')
++    try {
++      const stat = await file.stat()
++      if (!stat.isFile() || stat.size > 128) return 401
++      expected = (await file.readFile('utf8')).trim()
++    } finally { await file.close() }
++  } catch { return 401 }
++  if (!TOKEN_PATTERN.test(expected)) return 401
++  const hash = value => crypto.createHash('sha256').update(value).digest()
++  if (!crypto.timingSafeEqual(hash(match[1]), hash(expected))) return 401
++  return permits(req) ? 200 : 403
++}
+diff --git a/backend/test/integrationAuth.test.mjs b/backend/test/integrationAuth.test.mjs
+new file mode 100644
+index 0000000..c469311
+--- /dev/null
++++ b/backend/test/integrationAuth.test.mjs
+@@ -0,0 +1,55 @@
++import { test } from 'node:test'
++import assert from 'node:assert/strict'
++import crypto from 'node:crypto'
++import fs from 'node:fs/promises'
++import os from 'node:os'
++import path from 'node:path'
++import { authorizeIntegration } from '../lib/integrationAuth.mjs'
++
++const token = () => crypto.randomBytes(32).toString('base64url')
++
++test('integration token is bounded to catalog reads and album-only submission', async () => {
++  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'octocarte-token-'))
++  const file = path.join(dir, 'token')
++  const secret = token()
++  await fs.writeFile(file, secret + '\n', { mode: 0o600 })
++  const req = (method, route, body) => ({ method, path: route, body, headers: { authorization: 'Bearer ' + secret } })
++  try {
++    for (const route of ['/api/search', '/api/album/123', '/api/artist/123', '/api/artist/123/top-songs'])
++      assert.equal(await authorizeIntegration(req('GET', route), file), 200)
++    assert.equal(await authorizeIntegration(req('POST', '/api/download', { albumId: '123' }), file), 200)
++    for (const route of ['/api/settings', '/api/queue', '/api/library', '/api/auth/state', '/api/artist/123/other', '/api/artist/%31', '/api/album/../settings'])
++      assert.equal(await authorizeIntegration(req('GET', route), file), 403)
++    for (const route of ['/api/download/song', '/api/download/playlist', '/api/download/cancel-all', '/api/settings', '/api/download/'])
++      assert.equal(await authorizeIntegration(req('POST', route, { albumId: '123' }), file), 403)
++    for (const body of [{}, null, [], { albumId: 123 }, { albumId: '../settings' }, { albumId: '123', quality: 'aac' }])
++      assert.equal(await authorizeIntegration(req('POST', '/api/download', body), file), 403)
++    assert.equal(await authorizeIntegration(req('DELETE', '/api/download', { albumId: '123' }), file), 403)
++    assert.equal(await authorizeIntegration({ ...req('GET', '/api/search'), headers: {} }, file), null)
++    assert.equal(await authorizeIntegration({ ...req('GET', '/api/search'), headers: { authorization: 'Bearer ' + token() } }, file), 401)
++    assert.equal(await authorizeIntegration(req('GET', '/api/search'), ''), 401)
++    assert.equal(await authorizeIntegration({ ...req('GET', '/api/search'), headers: { authorization: 'Bearer' } }, file), 401)
++  } finally { await fs.rm(dir, { recursive: true, force: true }) }
++})
++
++test('rotation and revocation apply on the next request; invalid storage fails closed', async () => {
++  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'octocarte-token-'))
++  const file = path.join(dir, 'token')
++  const first = token(), second = token()
++  const req = value => ({ method: 'GET', path: '/api/search', headers: { authorization: 'Bearer ' + value } })
++  try {
++    await fs.writeFile(file, first, { mode: 0o600 })
++    assert.equal(await authorizeIntegration(req(first), file), 200)
++    await fs.writeFile(file + '.replacement', second, { mode: 0o600 })
++    await fs.rename(file + '.replacement', file)
++    assert.equal(await authorizeIntegration(req(first), file), 401)
++    assert.equal(await authorizeIntegration(req(second), file), 200)
++    for (const invalid of ['', 'short', 'x'.repeat(1000)]) {
++      await fs.writeFile(file, invalid)
++      assert.equal(await authorizeIntegration(req(second), file), 401)
++    }
++    await fs.unlink(file)
++    assert.equal(await authorizeIntegration(req(second), file), 401)
++    assert.equal(await authorizeIntegration(req(second), dir), 401)
++  } finally { await fs.rm(dir, { recursive: true, force: true }) }
++})
+diff --git a/backend/test/integrationAuthHttp.test.mjs b/backend/test/integrationAuthHttp.test.mjs
+new file mode 100644
+index 0000000..7a23ca3
+--- /dev/null
++++ b/backend/test/integrationAuthHttp.test.mjs
+@@ -0,0 +1,56 @@
++import { test } from 'node:test'
++import assert from 'node:assert/strict'
++import crypto from 'node:crypto'
++import fs from 'node:fs/promises'
++import os from 'node:os'
++import path from 'node:path'
++import express from 'express'
++import cookieParser from 'cookie-parser'
++
++const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'octocarte-auth-http-'))
++process.env.AMDL_CONFIG_DIR = dir
++process.env.OCTOCARTE_TOKEN_FILE = path.join(dir, 'integration-token')
++const secret = crypto.randomBytes(32).toString('base64url')
++await fs.writeFile(process.env.OCTOCARTE_TOKEN_FILE, secret, { mode: 0o600 })
++const { ensureConfigDir } = await import('../lib/settingsStore.mjs')
++await ensureConfigDir(dir)
++const { loadSecretsAtBoot } = await import('../lib/secretKey.mjs')
++loadSecretsAtBoot(dir)
++const { setCredentials, getSessionVersion } = await import('../lib/authStore.mjs')
++await setCredentials('fixture-user', crypto.randomBytes(32).toString('hex'))
++const { issueToken } = await import('../lib/sessionToken.mjs')
++const cookie = issueToken({ user: 'fixture-user', sv: await getSessionVersion() })
++const { requireAuth } = await import('../lib/requireAuth.mjs')
++const { originGuard } = await import('../lib/originGuard.mjs')
++
++test('service requests coexist with browser authentication and retain Origin enforcement', async () => {
++  const app = express()
++  app.use(express.json(), cookieParser(), originGuard(), requireAuth())
++  app.get('/api/search', (_req, res) => res.json({ songs: [] }))
++  app.get('/api/settings', (_req, res) => res.json({ fixture: true }))
++  app.post('/api/download', (_req, res) => res.status(202).json({ accepted: true }))
++  const server = app.listen(0, '127.0.0.1')
++  await new Promise(resolve => server.once('listening', resolve))
++  const base = `http://127.0.0.1:${server.address().port}`
++  const bearer = { Authorization: 'Bearer ' + secret }
++  try {
++    assert.equal((await fetch(base + '/api/search')).status, 401)
++    assert.equal((await fetch(base + '/api/search', { headers: bearer })).status, 200)
++    const expired = issueToken({ user: 'fixture-user', sv: await getSessionVersion(), iat: Date.now() - 31 * 86400000, exp: Date.now() - 86400000 })
++    assert.equal((await fetch(base + '/api/search', { headers: { Cookie: 'alacarte_session=' + expired } })).status, 401)
++    assert.equal((await fetch(base + '/api/search', { headers: bearer })).status, 200)
++    assert.equal((await fetch(base + '/api/settings', { headers: bearer })).status, 403)
++    assert.equal((await fetch(base + '/api/settings', { headers: { Cookie: 'alacarte_session=' + cookie } })).status, 200)
++    assert.equal((await fetch(base + '/api/settings', { headers: { ...bearer, Cookie: 'alacarte_session=' + cookie } })).status, 403)
++    const post = { method: 'POST', headers: { ...bearer, 'Content-Type': 'application/json' }, body: JSON.stringify({ albumId: '123' }) }
++    assert.equal((await fetch(base + '/api/download', post)).status, 403)
++    assert.equal((await fetch(base + '/api/download', { ...post, headers: { ...post.headers, Origin: base } })).status, 202)
++    assert.equal((await fetch(base + '/api/download', { ...post, headers: { ...post.headers, Origin: base }, body: JSON.stringify({ albumId: '123', quality: 'aac' }) })).status, 403)
++    await fs.unlink(process.env.OCTOCARTE_TOKEN_FILE)
++    assert.equal((await fetch(base + '/api/search', { headers: bearer })).status, 401)
++    assert.equal((await fetch(base + '/api/settings', { headers: { Cookie: 'alacarte_session=' + cookie } })).status, 200)
++  } finally {
++    await new Promise(resolve => server.close(resolve))
++    await fs.rm(dir, { recursive: true, force: true })
++  }
++})

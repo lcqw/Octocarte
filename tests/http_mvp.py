@@ -5,6 +5,10 @@ Usage: python3 tests/http_mvp.py (requires docker image octocarte:mvp).
 """
 import xml.etree.ElementTree as ET
 import json
+import os
+import secrets
+import tempfile
+from pathlib import Path
 import subprocess
 import threading
 import time
@@ -13,6 +17,10 @@ import urllib.parse
 import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+service_auth = os.environ.get("OCTOCARTE_TEST_SERVICE_AUTH") == "1"
+auth_token = secrets.token_urlsafe(32)
+image_name = os.environ.get("OCTOCARTE_TEST_IMAGE", "octocarte:mvp")
 
 state = {"local": False, "catalog_down": False, "posts": [], "youtube": 0, "local_streams": 0, "artist_calls": 0, "top_calls": 0}
 post_started = threading.Event()
@@ -39,6 +47,10 @@ class Fixture(BaseHTTPRequestHandler):
     def do_GET(self):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path
+        if path.startswith("/api/") and service_auth:
+            if self.headers.get("Authorization") != "Bearer " + auth_token:
+                return self.reply({}, 401)
+            assert not self.headers.get("Cookie")
         if path == "/api/search":
             if state["catalog_down"]:
                 return self.reply({}, 503)
@@ -91,6 +103,9 @@ class Fixture(BaseHTTPRequestHandler):
 
     def do_POST(self):
         assert self.path == "/api/download"
+        if service_auth:
+            assert self.headers.get("Authorization") == "Bearer " + auth_token
+            assert not self.headers.get("Cookie")
         assert self.headers.get("Origin") == "http://" + self.headers["Host"]
         if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
             chunks = []
@@ -128,11 +143,16 @@ with socket.socket() as port_socket:
     port = port_socket.getsockname()[1]
 base = f"http://127.0.0.1:{port}"
 name = "octocarte-contract-" + uuid.uuid4().hex[:8]
+secret_dir = tempfile.TemporaryDirectory(prefix="octocarte-http-auth-")
+token_path = Path(secret_dir.name) / "service-token"
+token_path.write_text(auth_token)
+token_path.chmod(0o600)
+auth_args = ["-v", str(token_path) + ":/run/secrets/alacarte-token:ro", "-e", "Alacarte__ServiceTokenFile=/run/secrets/alacarte-token"] if service_auth else []
 try:
     subprocess.run(["docker", "run", "--rm", "-d", "--name", name, "--network", "host",
                     "-e", f"ASPNETCORE_URLS={base}", "-e", f"Subsonic__Url={fixture_url}",
                     "-e", "Subsonic__MusicService=Alacarte", "-e", f"Alacarte__Url={fixture_url}",
-                    "-e", f"YouTube__ShimUrl={fixture_url}", "octocarte:mvp"], check=True, stdout=subprocess.DEVNULL)
+                    "-e", f"YouTube__ShimUrl={fixture_url}", *auth_args, image_name], check=True, stdout=subprocess.DEVNULL)
     for _ in range(100):
         try:
             urllib.request.urlopen(base, timeout=1).close()
@@ -206,6 +226,8 @@ try:
     with get("/rest/getOpenSubsonicExtensions", f="xml") as response:
         extensions = ET.fromstring(response.read()).findall("{*}openSubsonicExtensions")
     assert {e.attrib["name"] for e in extensions} == {"songLyrics", "topSongsByArtistId"}
+    if service_auth:
+        token_path.write_text("")  # Invalid credentials must not break local search.
     state["catalog_down"] = True
     with get("/rest/search3", query="Song") as response:
         songs = json.load(response)["subsonic-response"]["searchResult3"]["song"]
@@ -215,3 +237,4 @@ finally:
     release_post.set()
     subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     server.shutdown()
+    secret_dir.cleanup()
