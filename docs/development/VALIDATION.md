@@ -37,3 +37,19 @@ Wavio prefetching can request lossy Opus for ALAC; disabling prefetching resolve
 that report. The user subsequently selected lossless FLAC in ALACarte. Navic
 playback had an unresolved compatibility report. See [client notes](../CLIENTS.md).
 Public image redistribution remains subject to the [license review](LICENSING.md).
+
+## Standalone cleanup candidate
+
+Candidate `0.0.5-standalone.2`, built from `31e8f36`, passed the standalone
+container test with all five freshly built images. The unauthenticated ALACarte
+source download matched the emitted archive byte for byte; source notices and
+licenses were present, and app/shim/ALACarte image license files were verified.
+The HTTP streaming/acquisition fixture and all pull-request CI jobs passed.
+
+A separate disposable migration exercise started the original alpha Navidrome
+service and initializer from the release-tag Compose file, created an account
+and playlist, stopped that server and attached its data volume to a separately
+named Navidrome project using an external volume. The original account and
+playlist remained available. Stopping the new server and starting the original
+container also retained both, validating the documented rollback. Only temporary
+containers and volumes were used; this was not a migration of the user's NAS.
