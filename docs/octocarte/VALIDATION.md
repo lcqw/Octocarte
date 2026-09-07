@@ -2,7 +2,7 @@
 
 ## Automated
 
-- 682 .NET tests pass (including the upstream suite).
+- 687 .NET tests pass (including the upstream suite).
 - 22 shim tests pass.
 - Both container images build; Compose validates and starts.
 - Running-container HTTP fixtures verify Apple result IDs, temporary AAC/M4A
@@ -90,5 +90,17 @@ may already have been warm. Wavio's first-visit refresh behavior still needs a
 phone retest; these timings do not prove the UI issue is fixed.
 
 Real Apple top songs are available, but stock ALACarte does not expose them.
-A separate [optional patch](../../integrations/alacarte/README.md) is prepared
-and remains uninstalled pending the service-extension decision.
+The user approved the separate [optional patch](../../integrations/alacarte/README.md),
+which is now installed as a small overlay on the existing ALACarte image.
+Its complete 142-test backend suite passes, including normalization and HTTP
+route checks. The live endpoint rejects anonymous requests with HTTP 401 and
+preserves the saved storefront/rating/ALAC/lyrics/artwork/scan settings.
+
+Octocarte's expanded HTTP fixture checks ranked order, name/ID lookups,
+JSON/XML native replacement, count validation, stock-endpoint fallback and
+extension advertising. Live Kanye West requests returned five ranked songs
+in 0.613 seconds by name and 0.129 seconds by ID. Billie Eilish returned 50
+ranked songs in 0.346 seconds; three already owned tracks were replaced with
+real Navidrome IDs and native 24-bit / 44.1 or 48 kHz metadata. These checks
+were read-only and did not submit album jobs. Phone confirmation of top songs,
+artist photos, first-visit discography and external playback remains pending.

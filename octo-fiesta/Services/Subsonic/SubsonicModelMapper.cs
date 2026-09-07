@@ -121,6 +121,22 @@ public class SubsonicModelMapper
     private static string SongKey(string? title, string? artist)
         => Common.StringNormalizer.CreateComparisonKey(title) + "\u0001" + Common.StringNormalizer.CreateComparisonKey(artist);
 
+    /// <summary>Replace ranked placeholders with local tracks without changing their order.</summary>
+    public List<object> MergeRankedSongs(List<object> localSongs, List<octo_fiesta.Models.Domain.Song> ranked, bool isJson)
+    {
+        var owned = new Dictionary<string, object>();
+        foreach (var song in localSongs)
+        {
+            if (song is Dictionary<string, object> fields)
+                owned.TryAdd(SongKey(fields.GetValueOrDefault("title")?.ToString(), fields.GetValueOrDefault("artist")?.ToString()), song);
+            else if (song is XElement xml)
+                owned.TryAdd(SongKey(xml.Attribute("title")?.Value, xml.Attribute("artist")?.Value), song);
+        }
+        return ranked.Select(song => owned.GetValueOrDefault(SongKey(song.Title, song.Artist))
+            ?? (isJson ? (object)_responseBuilder.ConvertSongToJson(song)
+                : _responseBuilder.ConvertSongToXml(song, XNamespace.Get("http://subsonic.org/restapi")))).ToList();
+    }
+
     private (List<object> MergedSongs, List<object> MergedAlbums, List<object> MergedArtists) MergeSearchResultsJson(
         List<object> localSongs,
         List<object> localAlbums,

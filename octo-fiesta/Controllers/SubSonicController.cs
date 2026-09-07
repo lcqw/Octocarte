@@ -10,6 +10,7 @@ using octo_fiesta.Models.Search;
 using octo_fiesta.Models.Subsonic;
 using octo_fiesta.Services;
 using octo_fiesta.Services.Common;
+using octo_fiesta.Services.Alacarte;
 using octo_fiesta.Services.Local;
 using octo_fiesta.Services.Lyrics;
 using octo_fiesta.Services.SquidWTF;
@@ -365,6 +366,112 @@ public class SubsonicController : ControllerBase
 
         var lyrics = await _lyricsService.GetLyricsAsync(song, HttpContext.RequestAborted);
         return _responseBuilder.CreateLyricsBySongIdResponse(format, lyrics);
+    }
+
+    [HttpGet, HttpPost]
+    [Route("rest/getOpenSubsonicExtensions")]
+    [Route("rest/getOpenSubsonicExtensions.view")]
+    public async Task<IActionResult> GetOpenSubsonicExtensions()
+    {
+        var parameters = await ExtractAllParameters();
+        var format = parameters.GetValueOrDefault("f", "xml");
+        if (_metadataService is not IArtistTopSongsMetadata)
+        {
+            var relay = await _proxyService.RelayAsync("rest/getOpenSubsonicExtensions", parameters);
+            return File(relay.Body, relay.ContentType ?? $"application/{format}");
+        }
+        var extensions = new List<(string Name, int[] Versions)>();
+        var local = await _proxyService.RelaySafeAsync("rest/getOpenSubsonicExtensions", BuildJsonRelayParameters(parameters));
+        if (local.Success && local.Body != null)
+        {
+            try
+            {
+                using var doc = JsonDocument.Parse(local.Body);
+                if (doc.RootElement.GetProperty("subsonic-response").TryGetProperty("openSubsonicExtensions", out var list))
+                    foreach (var entry in list.EnumerateArray())
+                    {
+                        var name = entry.GetProperty("name").GetString();
+                        if (name != null && name != "topSongsByArtistId")
+                            extensions.Add((name, entry.GetProperty("versions").EnumerateArray().Select(v => v.GetInt32()).ToArray()));
+                    }
+            }
+            catch (Exception ex) when (ex is JsonException or InvalidOperationException or KeyNotFoundException)
+            { _logger.LogDebug("Could not parse Navidrome extension list"); }
+        }
+        extensions.Add(("topSongsByArtistId", [1]));
+        return _responseBuilder.CreateExtensionsResponse(format, extensions);
+    }
+
+    [HttpGet, HttpPost]
+    [Route("rest/getTopSongs")]
+    [Route("rest/getTopSongs.view")]
+    public async Task<IActionResult> GetTopSongs()
+    {
+        var parameters = await ExtractAllParameters();
+        var format = parameters.GetValueOrDefault("f", "xml");
+        var name = parameters.GetValueOrDefault("artist", "").Trim();
+        var id = parameters.GetValueOrDefault("id", "");
+        if (string.IsNullOrEmpty(name) && string.IsNullOrEmpty(id))
+            return _responseBuilder.CreateError(format, 10, "Missing artist or id parameter");
+        if (!int.TryParse(parameters.GetValueOrDefault("count", "50"), out var count) || count < 0)
+            return _responseBuilder.CreateError(format, 10, "Invalid count parameter");
+        count = Math.Min(count, 50);
+        if (_metadataService is not IArtistTopSongsMetadata catalog)
+        {
+            var relay = await _proxyService.RelayAsync("rest/getTopSongs", parameters);
+            return File(relay.Body, relay.ContentType ?? $"application/{format}");
+        }
+        string? appleArtistId = null;
+        if (!string.IsNullOrEmpty(id))
+        {
+            var parsed = _localLibraryService.ParseExternalId(id);
+            if (parsed.isExternal)
+            {
+                if (parsed.provider != "apple" || parsed.type != "artist")
+                    return _responseBuilder.CreateError(format, 70, "Artist not found");
+                appleArtistId = parsed.externalId;
+                name = (await _metadataService.GetArtistAsync("apple", appleArtistId!))?.Name ?? "";
+            }
+            else
+            {
+                var artistParams = BuildJsonRelayParameters(parameters);
+                artistParams["id"] = id;
+                var local = await _proxyService.RelaySafeAsync("rest/getArtist", artistParams);
+                name = "";
+                if (local.Success && local.Body != null)
+                {
+                    using var doc = JsonDocument.Parse(local.Body);
+                    if (doc.RootElement.GetProperty("subsonic-response").TryGetProperty("artist", out var artist))
+                        name = artist.GetProperty("name").GetString() ?? "";
+                }
+                if (string.IsNullOrEmpty(name)) return _responseBuilder.CreateError(format, 70, "Artist not found");
+            }
+        }
+        if (appleArtistId == null && !string.IsNullOrEmpty(name))
+        {
+            var matches = await _metadataService.SearchArtistsAsync(name, 20);
+            appleArtistId = matches.FirstOrDefault(a => string.Equals(a.Name.Trim(), name, StringComparison.OrdinalIgnoreCase))?.ExternalId;
+        }
+        var ranked = appleArtistId == null ? null : await catalog.GetArtistTopSongsAsync(appleArtistId, count);
+        if (ranked == null)
+        {
+            // Stock ALACarte has no top-songs route. Keep ordinary local behavior.
+            var fallback = new Dictionary<string, string>(parameters) { ["artist"] = name };
+            fallback.Remove("id");
+            var relay = await _proxyService.RelaySafeAsync("rest/getTopSongs", fallback);
+            if (relay.Success && relay.Body != null) return File(relay.Body, relay.ContentType ?? $"application/{format}");
+            return _responseBuilder.CreateTopSongsResponse(format, []);
+        }
+        var search = BuildJsonRelayParameters(parameters);
+        search["f"] = format;
+        search["query"] = name;
+        search["songCount"] = "500";
+        search["albumCount"] = "0";
+        search["artistCount"] = "0";
+        var localSongs = await _proxyService.RelaySafeAsync("rest/search3", search);
+        var owned = localSongs.Success && localSongs.Body != null
+            ? _modelMapper.ParseSearchResponse(localSongs.Body, localSongs.ContentType).Songs : [];
+        return _responseBuilder.CreateTopSongsResponse(format, _modelMapper.MergeRankedSongs(owned, ranked, format == "json"));
     }
 
     [HttpGet, HttpPost]

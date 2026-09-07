@@ -63,7 +63,8 @@ validates client credentials with Navidrome and uses them for local lookups.
   by default. Its legacy download implementations are not used for Apple tracks.
 
 Artist photos use ALACarte artist detail and standard Subsonic image responses.
-For ranked top songs and discovery, see the [optional ALACarte extension](integrations/alacarte/README.md); it is not installed.
+Ranked artist top songs are available through the [optional ALACarte extension](integrations/alacarte/README.md), installed in this local validation setup.
+Apple ranking is retained while matching native Navidrome tracks take precedence.
 
 ## Verify
 

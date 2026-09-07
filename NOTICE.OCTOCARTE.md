@@ -11,3 +11,8 @@ in Git history. See LICENSE for the complete license text.
 [ALACarte](https://github.com/sosjalapeno/alacarte) is an independent HTTP service.
 No Apple authentication, decryption, downloading, tagging, lyrics or library
 management implementation is incorporated from it.
+
+An optional ALACarte catalog endpoint patch is distributed separately under
+ALACarte's AGPL-3.0-only license in `integrations/alacarte`, with its full license
+and attribution. It extends the separate service and is not compiled into
+Octocarte. Apple authentication and acquisition remain owned by ALACarte.

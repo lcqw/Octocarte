@@ -201,6 +201,62 @@ public class OctocarteContractTests
     }
 
     [Fact]
+    public async Task TopSongsUseRankedEndpointCacheAndOriginalAlbumIds()
+    {
+        var calls = 0;
+        using var metadata = new AlacarteMetadataService(new AlacarteClient(Factory((req, ct) => {
+            calls++;
+            Assert.Equal("/api/artist/9/top-songs", req.RequestUri!.AbsolutePath);
+            Assert.Equal("?limit=50", req.RequestUri.Query);
+            return Task.FromResult(Json("""{"songs":[{"id":"42","name":"First","artistName":"Artist","albumId":"7"},{"id":"43","name":"Second","artistName":"Artist","albumId":"8"}]}"""));
+        })));
+        var songs = await metadata.GetArtistTopSongsAsync("9", 1);
+        Assert.Equal("ext-apple-album-7", Assert.Single(songs!).AlbumId);
+        Assert.Equal(2, (await metadata.GetArtistTopSongsAsync("9", 50))!.Count);
+        Assert.Equal(1, calls);
+        Assert.Equal("First", (await metadata.GetSongAsync("apple", "42"))!.Title);
+    }
+
+    [Theory]
+    [InlineData(404)]
+    [InlineData(502)]
+    public async Task MissingTopSongsEndpointFallsBack(int status)
+    {
+        using var metadata = new AlacarteMetadataService(new AlacarteClient(Factory((req, ct) => Task.FromResult(Json("{}", (HttpStatusCode)status)))));
+        Assert.Null(await metadata.GetArtistTopSongsAsync("9", 50));
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public void RankedSongsKeepOrderAndNativeMetadata(bool json)
+    {
+        var builder = new SubsonicResponseBuilder();
+        var mapper = new SubsonicModelMapper(builder, NullLogger<SubsonicModelMapper>.Instance);
+        var ns = XNamespace.Get("http://subsonic.org/restapi");
+        object local = json ? new Dictionary<string, object> { ["id"] = "local-43", ["title"] = "Second", ["artist"] = "Artist", ["bitDepth"] = 24 }
+            : new XElement(ns + "song", new XAttribute("id", "local-43"), new XAttribute("title", "Second"), new XAttribute("artist", "Artist"), new XAttribute("bitDepth", 24));
+        var ranked = new List<Song> { new() { ExternalProvider = "apple", ExternalId = "42", Title = "First", Artist = "Artist" }, new() { ExternalProvider = "apple", ExternalId = "43", Title = "Second", Artist = "Artist" } };
+        var result = mapper.MergeRankedSongs([local], ranked, json);
+        Assert.Equal(2, result.Count);
+        Assert.Same(local, result[1]);
+        if (json)
+        {
+            using var doc = JsonDocument.Parse(JsonSerializer.Serialize(((JsonResult)builder.CreateTopSongsResponse("json", result)).Value));
+            var songs = doc.RootElement.GetProperty("subsonic-response").GetProperty("topSongs").GetProperty("song");
+            Assert.Equal("ext-apple-song-42", songs[0].GetProperty("id").GetString());
+            Assert.Equal(24, songs[1].GetProperty("bitDepth").GetInt32());
+        }
+        else
+        {
+            var doc = XDocument.Parse(((ContentResult)builder.CreateTopSongsResponse("xml", result)).Content!);
+            var songs = doc.Root!.Element(ns + "topSongs")!.Elements(ns + "song").ToList();
+            Assert.Equal("ext-apple-song-42", songs[0].Attribute("id")!.Value);
+            Assert.Equal("24", songs[1].Attribute("bitDepth")!.Value);
+        }
+    }
+
+    [Fact]
     public async Task AlreadyPresentIsSuccessfulNoOp()
     {
         var api = new AlacarteClient(Factory((req, ct) => Task.FromResult(Json("""{"code":"ALREADY_IN_LIBRARY"}""", HttpStatusCode.Conflict))));

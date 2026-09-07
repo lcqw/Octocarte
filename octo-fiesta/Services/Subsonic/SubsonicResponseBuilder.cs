@@ -304,6 +304,28 @@ public class SubsonicResponseBuilder
         return new ContentResult { Content = doc.ToString(), ContentType = "application/xml; charset=utf-8" };
     }
 
+    public IActionResult CreateExtensionsResponse(string format, List<(string Name, int[] Versions)> extensions)
+    {
+        if (format == "json") return CreateJsonResponse(new { status = "ok", version = SubsonicVersion,
+            openSubsonicExtensions = extensions.Select(e => new { name = e.Name, versions = e.Versions }) });
+        var ns = XNamespace.Get(SubsonicNamespace);
+        var document = new XDocument(new XElement(ns + "subsonic-response",
+            new XAttribute("status", "ok"), new XAttribute("version", SubsonicVersion),
+            extensions.Select(e => new XElement(ns + "openSubsonicExtensions", new XAttribute("name", e.Name),
+                e.Versions.Select(v => new XElement(ns + "versions", v))))));
+        return new ContentResult { Content = document.ToString(), ContentType = "application/xml; charset=utf-8" };
+    }
+
+    public IActionResult CreateTopSongsResponse(string format, List<object> songs)
+    {
+        if (format == "json") return CreateJsonResponse(new { status = "ok", version = SubsonicVersion, topSongs = new { song = songs } });
+        var ns = XNamespace.Get(SubsonicNamespace);
+        var document = new XDocument(new XElement(ns + "subsonic-response",
+            new XAttribute("status", "ok"), new XAttribute("version", SubsonicVersion),
+            new XElement(ns + "topSongs", songs)));
+        return new ContentResult { Content = document.ToString(), ContentType = "application/xml; charset=utf-8" };
+    }
+
     /// <summary>
     /// Creates artist information with the image fields used by Subsonic clients.
     /// </summary>

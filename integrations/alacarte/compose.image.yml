@@ -1,0 +1,4 @@
+# Add after the existing ALACarte Compose file; requires the patched image.
+services:
+  web:
+    image: octocarte-alacarte:top-songs

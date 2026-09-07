@@ -3,6 +3,7 @@
 No real credentials, Apple jobs, YouTube calls or user-library writes.
 Usage: python3 tests/http_mvp.py (requires docker image octocarte:mvp).
 """
+import xml.etree.ElementTree as ET
 import json
 import subprocess
 import threading
@@ -13,7 +14,7 @@ import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-state = {"local": False, "catalog_down": False, "posts": [], "youtube": 0, "local_streams": 0, "artist_calls": 0}
+state = {"local": False, "catalog_down": False, "posts": [], "youtube": 0, "local_streams": 0, "artist_calls": 0, "top_calls": 0}
 post_started = threading.Event()
 release_post = threading.Event()
 local_song = {"id": "local-42", "title": "Song", "artist": "Artist", "album": "Album",
@@ -41,7 +42,14 @@ class Fixture(BaseHTTPRequestHandler):
         if path == "/api/search":
             if state["catalog_down"]:
                 return self.reply({}, 503)
-            return self.reply({"songs": [{"id": "42", "name": "Song", "artistName": "Artist", "albumName": "Album", "albumId": "7", "durationMs": 120000}], "albums": [], "artists": []})
+            return self.reply({"songs": [{"id": "42", "name": "Song", "artistName": "Artist", "albumName": "Album", "albumId": "7", "durationMs": 120000}], "albums": [], "artists": [{"id": "9", "name": "Artist"}]})
+        if path == "/api/artist/9/top-songs":
+            state["top_calls"] += 1
+            return self.reply({"songs": [{"id": "43", "name": "Other", "artistName": "Artist", "albumId": "8"}, {"id": "42", "name": "Song", "artistName": "Artist", "albumId": "7"}]})
+        if path == "/api/artist/10/top-songs":
+            return self.reply({}, 404)
+        if path == "/api/artist/10":
+            return self.reply({"artist": {"id": "10", "name": "Stock ALACarte Artist"}, "albums": []})
         if path == "/api/artist/9":
             state["artist_calls"] += 1
             return self.reply({"artist": {"id": "9", "name": "Artist", "artworkTemplate": "https://images.example/{w}x{h}bb.jpg"}, "albums": [{"id": "7", "name": "Album"}]})
@@ -60,6 +68,23 @@ class Fixture(BaseHTTPRequestHandler):
         response = {"status": "ok", "version": "1.16.1"}
         if path == "/rest/search3":
             response["searchResult3"] = {"song": [local_song] if state["local"] else [], "album": [], "artist": []}
+        if path == "/rest/getArtist":
+            response["artist"] = {"id": "local-artist", "name": "Artist", "album": []}
+        if path == "/rest/getTopSongs":
+            response["topSongs"] = {"song": [local_song]}
+        if path == "/rest/getOpenSubsonicExtensions":
+            response["openSubsonicExtensions"] = [{"name": "songLyrics", "versions": [1]}]
+        if path == "/rest/search3" and urllib.parse.parse_qs(parsed.query).get("f") == ["xml"]:
+            root = ET.Element("subsonic-response", {"xmlns": "http://subsonic.org/restapi", "status": "ok"})
+            results = ET.SubElement(root, "searchResult3")
+            if state["local"]: ET.SubElement(results, "song", {k: str(v) for k, v in local_song.items()})
+            body = ET.tostring(root)
+            self.send_response(200)
+            self.send_header("Content-Type", "application/xml")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
         if path == "/rest/getSong":
             response["song"] = local_song
         return self.reply({"subsonic-response": response})
@@ -159,11 +184,33 @@ try:
         assert response.headers["Content-Range"] == "bytes 0-1/200"
         assert response.read() == b"AL"
     assert state["youtube"] == youtube_before and state["local_streams"] == 1
+    for lookup in [{"artist": "Artist"}, {"id": "ext-apple-artist-9", "artist": "ignored"}, {"id": "local-artist"}]:
+        with get("/rest/getTopSongs.view", **lookup) as response:
+            top = json.load(response)["subsonic-response"]["topSongs"]["song"]
+        assert [x["id"] for x in top] == ["ext-apple-song-43", "local-42"]
+        assert top[0]["suffix"] == "m4a" and top[1]["bitDepth"] == 24
+    assert state["top_calls"] == 1
+    with get("/rest/getTopSongs", id="ext-apple-artist-9", f="xml") as response:
+        top = ET.fromstring(response.read()).findall("{*}topSongs/{*}song")
+    assert [x.attrib["id"] for x in top] == ["ext-apple-song-43", "local-42"]
+    assert top[1].attrib["bitDepth"] == "24"
+    with get("/rest/getTopSongs", id="ext-apple-artist-9", count=1) as response:
+        assert len(json.load(response)["subsonic-response"]["topSongs"]["song"]) == 1
+    with get("/rest/getTopSongs", id="ext-apple-artist-10") as response:
+        assert json.load(response)["subsonic-response"]["topSongs"]["song"][0]["id"] == "local-42"
+    with get("/rest/getTopSongs", artist="Artist", count=-1) as response:
+        assert json.load(response)["subsonic-response"]["error"]["code"] == 10
+    with get("/rest/getOpenSubsonicExtensions") as response:
+        extensions = json.load(response)["subsonic-response"]["openSubsonicExtensions"]
+    assert {e["name"] for e in extensions} == {"songLyrics", "topSongsByArtistId"}
+    with get("/rest/getOpenSubsonicExtensions", f="xml") as response:
+        extensions = ET.fromstring(response.read()).findall("{*}openSubsonicExtensions")
+    assert {e.attrib["name"] for e in extensions} == {"songLyrics", "topSongsByArtistId"}
     state["catalog_down"] = True
     with get("/rest/search3", query="Song") as response:
         songs = json.load(response)["subsonic-response"]["searchResult3"]["song"]
     assert len(songs) == 1 and songs[0]["id"] == "local-42"
-    print("PASS: HTTP catalog, external IDs, AAC metadata, nonblocking album POST, burst guard, ranges, local search replacement and old-ID Navidrome playback")
+    print("PASS: artist images, ranked top songs, local replacement, XML/JSON, extension advertising, fallback, HTTP catalog, external IDs, AAC metadata, nonblocking album POST, burst guard, ranges, local search replacement and old-ID Navidrome playback")
 finally:
     release_post.set()
     subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

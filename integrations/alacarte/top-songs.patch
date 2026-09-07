@@ -117,3 +117,63 @@ index 0000000..53bc1a0
 +  assert.deepEqual(await loadArtistTopSongs({ artistId: '9' }, async () => ({ data: [] })), [])
 +  await assert.rejects(loadArtistTopSongs({ artistId: '9' }, async () => { throw new Error('unavailable') }))
 +})
+diff --git a/backend/test/artistTopSongsRoute.test.mjs b/backend/test/artistTopSongsRoute.test.mjs
+new file mode 100644
+index 0000000..8ed8eb9
+--- /dev/null
++++ b/backend/test/artistTopSongsRoute.test.mjs
+@@ -0,0 +1,54 @@
++import { test } from 'node:test'
++import assert from 'node:assert/strict'
++import express from 'express'
++import os from 'node:os'
++import path from 'node:path'
++import fsp from 'node:fs/promises'
++
++const dir = await fsp.mkdtemp(path.join(os.tmpdir(), 'alacarte-top-songs-'))
++process.env.AMDL_CONFIG_DIR = dir
++const { ensureConfigDir, writeSettings } = await import('../lib/settingsStore.mjs')
++await ensureConfigDir(dir)
++await writeSettings({ storefront: 'us', language: 'en-US', explicitFilter: 'explicit' })
++const { artistRouter } = await import('../routes/artist.mjs')
++
++test('HTTP route validates bounds, uses saved settings and hides upstream errors', async () => {
++  const originalFetch = globalThis.fetch
++  let fail = false
++  globalThis.fetch = async (input, options) => {
++    const url = new URL(input)
++    if (url.hostname === 'music.apple.com')
++      return new Response(url.pathname === '/' ? '"/assets/index~fixture.js"' : 'eyJfixture.eyJfixture.fixture')
++    if (url.hostname === 'amp-api.music.apple.com') {
++      assert.equal(url.pathname, '/v1/catalog/us/artists/9/view/top-songs')
++      assert.equal(url.searchParams.get('l'), 'en-US')
++      assert.equal(url.searchParams.get('include'), 'albums,artists')
++      assert.equal(url.searchParams.get('limit'), '2')
++      return fail ? new Response('private upstream diagnostic', { status: 500 })
++        : Response.json({ data: [{ id: '42', type: 'songs', attributes: { name: 'First', artistName: 'Artist' } }] })
++    }
++    return originalFetch(input, options)
++  }
++  const app = express()
++  app.use('/api/artist', artistRouter)
++  const server = app.listen(0, '127.0.0.1')
++  await new Promise(resolve => server.once('listening', resolve))
++  const base = `http://127.0.0.1:${server.address().port}/api/artist`
++  try {
++    for (const tail of ['bad/top-songs', '9/top-songs?limit=0', '9/top-songs?limit=51', '9/top-songs?limit=abc'])
++      assert.equal((await fetch(`${base}/${tail}`)).status, 400)
++    const good = await fetch(`${base}/9/top-songs?limit=2&storefront=gb`)
++    assert.equal(good.status, 200)
++    const data = await good.json()
++    assert.equal(data.storefront, 'us')
++    assert.equal(data.songs[0].id, '42')
++    fail = true
++    const bad = await fetch(`${base}/9/top-songs?limit=2`)
++    assert.equal(bad.status, 502)
++    assert.deepEqual(await bad.json(), { error: 'Artist top songs unavailable' })
++  } finally {
++    globalThis.fetch = originalFetch
++    await new Promise(resolve => server.close(resolve))
++    await fsp.rm(dir, { recursive: true, force: true })
++  }
++})

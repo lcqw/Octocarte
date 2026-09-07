@@ -7,17 +7,18 @@ using octo_fiesta.Models.Search;
 
 namespace octo_fiesta.Services.Alacarte;
 
-public sealed class AlacarteMetadataService(AlacarteClient api, ILogger<AlacarteMetadataService>? logger = null) : IMusicMetadataService, IDisposable
+public sealed class AlacarteMetadataService(AlacarteClient api, ILogger<AlacarteMetadataService>? logger = null) : IMusicMetadataService, IArtistTopSongsMetadata, IDisposable
 {
     private readonly MemoryCache songs = new(new MemoryCacheOptions { SizeLimit = 10000 });
     private readonly MemoryCache artists = new(new MemoryCacheOptions { SizeLimit = 512 });
     private readonly ConcurrentDictionary<string, Lazy<Task<JsonElement>>> artistRequests = new();
-    private async Task<JsonElement> ArtistDetailsAsync(string id)
+    private Task<JsonElement> ArtistDetailsAsync(string id) => CachedArtistDataAsync(id, $"api/artist/{Uri.EscapeDataString(id)}");
+    private async Task<JsonElement> CachedArtistDataAsync(string id, string path)
     {
         if (artists.TryGetValue<JsonElement>(id, out var cached)) return cached;
         var pending = artistRequests.GetOrAdd(id, key => new Lazy<Task<JsonElement>>(async () =>
         {
-            var data = await api.GetAsync($"api/artist/{Uri.EscapeDataString(key)}");
+            var data = await api.GetAsync(path);
             artists.Set(key, data, new MemoryCacheEntryOptions().SetSize(1).SetAbsoluteExpiration(TimeSpan.FromMinutes(5)));
             return data;
         }));
@@ -102,6 +103,20 @@ public sealed class AlacarteMetadataService(AlacarteClient api, ILogger<Alacarte
     {
         if (externalProvider != "apple") return [];
         return Items(await ArtistDetailsAsync(externalId), "albums").Select(MapAlbum).ToList();
+    }
+    public async Task<List<Song>?> GetArtistTopSongsAsync(string artistId, int count)
+    {
+        if (count <= 0) return [];
+        try
+        {
+            var data = await CachedArtistDataAsync("top:" + artistId, $"api/artist/{Uri.EscapeDataString(artistId)}/top-songs?limit=50");
+            return Items(data, "songs").Take(Math.Clamp(count, 0, 50)).Select(t => MapSong(t)).ToList();
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException or JsonException)
+        {
+            logger?.LogDebug("ALACarte artist top songs unavailable; using Navidrome fallback");
+            return null;
+        }
     }
     public Task<List<ExternalPlaylist>> SearchPlaylistsAsync(string query, int limit = 20) => Task.FromResult(new List<ExternalPlaylist>());
     public Task<ExternalPlaylist?> GetPlaylistAsync(string externalProvider, string externalId) => Task.FromResult<ExternalPlaylist?>(null);
