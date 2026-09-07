@@ -30,8 +30,11 @@ be supplied with `--alacarte-source /path/to/alacarte` to avoid downloading it
 again; only the pinned committed revision is read.
 
 Every base image is resolved to a registry digest before building. The manifest
-records those digests, source revisions and resulting image IDs. Runtime Compose
-uses the image IDs directly and never pulls a replacement. OS package repositories
+records those digests, source revisions and builder image IDs for traceability.
+Runtime Compose uses the versioned names saved in the archive and never pulls a
+replacement. Those names survive import across Docker image-store types; the
+builder’s raw image IDs may not. Retain the archive/checksums and avoid retagging
+its versioned images. OS package repositories
 can still change between builds; the image archive is the exact tested artifact,
 not a claim of bit-for-bit reproducible builds at a later date.
 
@@ -134,3 +137,22 @@ Never move a validation tag or silently replace a package's image manifest.
 The private package includes Octocarte source and modified ALACarte source with
 their existing licenses. Review full history, artifacts and binary redistribution
 requirements before any public release.
+
+## Repair an early preview's image references
+
+If `init` reports `No such image: sha256:...` after loading `nas-preview.2`, its
+original `images.env` used IDs specific to the builder's Docker image store.
+Replace that file with:
+
+```dotenv
+OCTOCARTE_IMAGE=octocarte:nas-preview.2
+SHIM_IMAGE=octocarte-shim:nas-preview.2
+ALACARTE_IMAGE=octocarte-alacarte:nas-preview.2
+WRAPPER_IMAGE=octocarte-wrapper:nas-preview.2
+NAVIDROME_IMAGE=deluan/navidrome:0.63.2
+```
+
+Then rerun `init` and proceed to `up` only if initialization succeeds. Missing
+service directories after a failed initialization do not require manual creation.
+If one of these named images is missing too, repeat `docker load -i images.tar`.
+The image archive and service data do not need to be rebuilt or deleted.

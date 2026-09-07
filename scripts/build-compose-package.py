@@ -24,6 +24,12 @@ def output(*args):
     return subprocess.check_output(args, text=True).strip()
 
 
+def write_image_environment(destination, images):
+    # Docker's containerd and classic stores can expose different .Id values
+    # for the same archive. RepoTags survive export/import on both stores.
+    destination.write_text(''.join(key + '=' + value['tag'] + '\n' for key, value in images.items()))
+
+
 def archive(source, revision, destination, tar_path):
     run('git', '-C', str(source), 'archive', '--format=tar', '-o', str(tar_path), revision)
     destination.mkdir()
@@ -104,7 +110,7 @@ def main():
                 if item.is_file() and item.name != 'IMPLEMENTATION_PLAN.md':
                     shutil.copy2(item, destination / item.name)
             (destination / 'manage.sh').chmod(0o755)
-            (destination / 'images.env').write_text(''.join(key + '=' + value['id'] + '\n' for key, value in manifest['images'].items()))
+            write_image_environment(destination / 'images.env', manifest['images'])
             (destination / 'images.lock.json').write_text(json.dumps(manifest, indent=2) + '\n')
             run('docker', 'save', '-o', str(destination / 'images.tar'), *(v['tag'] for v in manifest['images'].values()))
             checksums = []
