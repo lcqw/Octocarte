@@ -305,8 +305,28 @@ public class SubsonicResponseBuilder
     }
 
     /// <summary>
-    /// Creates a Subsonic response containing an artist with albums.
+    /// Creates artist information with the image fields used by Subsonic clients.
     /// </summary>
+    public IActionResult CreateArtistInfoResponse(string format, string elementName, Artist artist)
+    {
+        var info = new Dictionary<string, object>();
+        if (!string.IsNullOrEmpty(artist.ImageUrl))
+        {
+            info["smallImageUrl"] = artist.ImageUrl;
+            info["mediumImageUrl"] = artist.ImageUrl;
+            info["largeImageUrl"] = artist.ImageUrl;
+        }
+        if (format == "json") return CreateJsonResponse(new Dictionary<string, object>
+        {
+            ["status"] = "ok", ["version"] = SubsonicVersion, [elementName] = info
+        });
+        var ns = XNamespace.Get(SubsonicNamespace);
+        var document = new XDocument(new XElement(ns + "subsonic-response",
+            new XAttribute("status", "ok"), new XAttribute("version", SubsonicVersion),
+            new XElement(ns + elementName, info.Select(p => new XElement(ns + p.Key, p.Value)))));
+        return new ContentResult { Content = document.ToString(), ContentType = "application/xml; charset=utf-8" };
+    }
+
     public IActionResult CreateArtistResponse(string format, Artist artist, List<Album> albums)
     {
         if (format == "json")
@@ -337,6 +357,7 @@ public class SubsonicResponseBuilder
                     new XAttribute("name", artist.Name),
                     new XAttribute("coverArt", artist.Id),
                     new XAttribute("albumCount", albums.Count),
+                    string.IsNullOrEmpty(artist.ImageUrl) ? null : new XAttribute("artistImageUrl", artist.ImageUrl),
                     albums.Select(a => ConvertAlbumToXml(a, ns))
                 )
             )
@@ -485,8 +506,8 @@ public class SubsonicResponseBuilder
             ["isExternal"] = !artist.IsLocal
         };
 
-        // Only include coverArt if the artist has an image URL (avoids broken images)
-        if (artist.IsLocal || !string.IsNullOrEmpty(artist.ImageUrl))
+        // Apple search omits artwork; getCoverArt resolves it lazily from artist detail.
+        if (artist.IsLocal || artist.ExternalProvider == "apple" || !string.IsNullOrEmpty(artist.ImageUrl))
         {
             result["coverArt"] = artist.Id;
         }
@@ -637,8 +658,8 @@ public class SubsonicResponseBuilder
             new XAttribute("isExternal", (!artist.IsLocal).ToString().ToLower())
         );
 
-        // Only include coverArt if the artist has an image URL (avoids broken images)
-        if (artist.IsLocal || !string.IsNullOrEmpty(artist.ImageUrl))
+        // Apple search omits artwork; getCoverArt resolves it lazily from artist detail.
+        if (artist.IsLocal || artist.ExternalProvider == "apple" || !string.IsNullOrEmpty(artist.ImageUrl))
         {
             element.Add(new XAttribute("coverArt", artist.Id));
         }

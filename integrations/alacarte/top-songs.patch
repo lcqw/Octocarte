@@ -1,0 +1,119 @@
+diff --git a/backend/lib/appleApi.mjs b/backend/lib/appleApi.mjs
+index 3750708..428643d 100644
+--- a/backend/lib/appleApi.mjs
++++ b/backend/lib/appleApi.mjs
+@@ -83,6 +83,13 @@ export async function getArtist({ storefront, id, language = 'en-US' }) {
+   return apiGet(url, { language })
+ }
+ 
++// Catalog ranking only; uses the same Apple client and authentication as search.
++export async function getArtistTopSongs({ storefront, id, language = 'en-US', limit = 50 }) {
++  const qs = new URLSearchParams({ include: 'albums,artists', limit: String(limit), l: language })
++  const url = `${BASE}/${encodeURIComponent(storefront)}/artists/${encodeURIComponent(id)}/view/top-songs?${qs}`
++  return apiGet(url, { language })
++}
++
+ export async function getPlaylist({ storefront, id, language = 'en-US' }) {
+   const qs = new URLSearchParams({
+     include: 'tracks',
+diff --git a/backend/routes/artist.mjs b/backend/routes/artist.mjs
+index e293b37..a3754d2 100644
+--- a/backend/routes/artist.mjs
++++ b/backend/routes/artist.mjs
+@@ -1,6 +1,7 @@
+ import express from 'express'
+ 
+ import { readSettings } from '../lib/settingsStore.mjs'
++import { loadArtistTopSongs } from '../lib/artistTopSongs.mjs'
+ import { loadArtistCatalogCached } from '../lib/artistCatalogCache.mjs'
+ 
+ export const artistRouter = express.Router()
+@@ -30,3 +31,20 @@ artistRouter.get('/:id', async (req, res) => {
+     res.status(502).json({ error: err.message })
+   }
+ })
++
++// This read-only route inherits the normal /api authentication middleware.
++artistRouter.get('/:id/top-songs', async (req, res) => {
++  const id = String(req.params.id || '').trim()
++  const limit = Number(req.query.limit ?? 50)
++  if (!/^\d+$/.test(id) || !Number.isInteger(limit) || limit < 1 || limit > 50)
++    return res.status(400).json({ error: 'numeric artist id and limit 1..50 required' })
++  try {
++    const settings = await readSettings()
++    const storefront = settings.storefront || 'us'
++    const songs = await loadArtistTopSongs({ artistId: id, storefront,
++      language: settings.language || 'en-US', explicitFilter: settings.explicitFilter, limit })
++    res.json({ songs, storefront })
++  } catch {
++    res.status(502).json({ error: 'Artist top songs unavailable' })
++  }
++})
+diff --git a/backend/lib/artistTopSongs.mjs b/backend/lib/artistTopSongs.mjs
+new file mode 100644
+index 0000000..f311448
+--- /dev/null
++++ b/backend/lib/artistTopSongs.mjs
+@@ -0,0 +1,23 @@
++// SPDX-License-Identifier: AGPL-3.0-only
++import { getArtistTopSongs } from './appleApi.mjs'
++import { filterAlbumsByRating } from './contentRatingFilter.mjs'
++
++export async function loadArtistTopSongs({ artistId, storefront, language, explicitFilter, limit = 50 }, fetchSongs = getArtistTopSongs) {
++  const raw = await fetchSongs({ id: artistId, storefront, language, limit })
++  const songs = (raw?.data || []).filter(x => x.type === 'songs').map(x => {
++    const a = x.attributes || {}
++    const albumFromUrl = (a.url || '').match(/\/album\/(?:[^/]+\/)?(\d+)(?:\?|$)/)?.[1]
++    return {
++      id: x.id, name: a.name, artistName: a.artistName,
++      artistId: x.relationships?.artists?.data?.[0]?.id || artistId,
++      albumId: x.relationships?.albums?.data?.[0]?.id || albumFromUrl || null,
++      albumName: a.albumName, durationMs: a.durationInMillis,
++      trackNumber: a.trackNumber, discNumber: a.discNumber,
++      isrc: a.isrc || null, artworkTemplate: a.artwork?.url || null,
++      contentRating: a.contentRating, url: a.url,
++    }
++  })
++  // The existing preference helper also groups these name/artist/rating records.
++  // Retain Apple's relative ranking; never invent popularity from search order.
++  return filterAlbumsByRating(songs, explicitFilter || 'explicit').slice(0, limit)
++}
+diff --git a/backend/test/artistTopSongs.test.mjs b/backend/test/artistTopSongs.test.mjs
+new file mode 100644
+index 0000000..53bc1a0
+--- /dev/null
++++ b/backend/test/artistTopSongs.test.mjs
+@@ -0,0 +1,33 @@
++import { test } from 'node:test'
++import assert from 'node:assert/strict'
++import { loadArtistTopSongs } from '../lib/artistTopSongs.mjs'
++
++test('ranked songs preserve parent IDs, metadata and saved preference', async () => {
++  const song = (id, name, rating) => ({ id, type: 'songs', attributes: {
++    name, artistName: 'Artist', contentRating: rating, albumName: 'Album',
++    durationInMillis: 123000, artwork: { url: 'https://example/{w}x{h}.jpg' },
++    url: 'https://music.apple.com/us/album/album/7?i=' + id,
++  }, relationships: { artists: { data: [{ id: '9' }] } } })
++  const data = [song('1', 'First', 'clean'), song('2', 'First', 'explicit'), song('3', 'Second', 'explicit')]
++  const result = await loadArtistTopSongs({ artistId: '9', storefront: 'us', language: 'en-US', explicitFilter: 'explicit', limit: 50 }, async args => {
++    assert.deepEqual(args, { id: '9', storefront: 'us', language: 'en-US', limit: 50 })
++    return { data }
++  })
++  assert.deepEqual(result.map(x => x.id), ['2', '3'])
++  assert.equal(result[0].albumId, '7')
++  assert.equal(result[0].artistId, '9')
++  assert.equal(result[0].durationMs, 123000)
++})
++
++test('relationship album ID wins and absent albums remain unresolved', async () => {
++  const data = [{ id: '1', type: 'songs', attributes: { name: 'First' }, relationships: { albums: { data: [{ id: '8' }] } } }, { id: '2', type: 'songs', attributes: { name: 'Second' } }]
++  const result = await loadArtistTopSongs({ artistId: '9', limit: 50 }, async () => ({ data }))
++  assert.equal(result[0].albumId, '8')
++  assert.equal(result[1].albumId, null)
++  assert.equal(result[1].artistId, '9')
++})
++
++test('empty ranking and upstream failure do not produce invented songs', async () => {
++  assert.deepEqual(await loadArtistTopSongs({ artistId: '9' }, async () => ({ data: [] })), [])
++  await assert.rejects(loadArtistTopSongs({ artistId: '9' }, async () => { throw new Error('unavailable') }))
++})

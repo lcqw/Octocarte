@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using octo_fiesta.Models.Subsonic;
 using System.Text.Json;
 using Microsoft.Extensions.Caching.Memory;
@@ -9,6 +10,20 @@ namespace octo_fiesta.Services.Alacarte;
 public sealed class AlacarteMetadataService(AlacarteClient api, ILogger<AlacarteMetadataService>? logger = null) : IMusicMetadataService, IDisposable
 {
     private readonly MemoryCache songs = new(new MemoryCacheOptions { SizeLimit = 10000 });
+    private readonly MemoryCache artists = new(new MemoryCacheOptions { SizeLimit = 512 });
+    private readonly ConcurrentDictionary<string, Lazy<Task<JsonElement>>> artistRequests = new();
+    private async Task<JsonElement> ArtistDetailsAsync(string id)
+    {
+        if (artists.TryGetValue<JsonElement>(id, out var cached)) return cached;
+        var pending = artistRequests.GetOrAdd(id, key => new Lazy<Task<JsonElement>>(async () =>
+        {
+            var data = await api.GetAsync($"api/artist/{Uri.EscapeDataString(key)}");
+            artists.Set(key, data, new MemoryCacheEntryOptions().SetSize(1).SetAbsoluteExpiration(TimeSpan.FromMinutes(5)));
+            return data;
+        }));
+        try { return await pending.Value; }
+        finally { artistRequests.TryRemove(new KeyValuePair<string, Lazy<Task<JsonElement>>>(id, pending)); }
+    }
     internal static string? Text(JsonElement e, string key) => e.TryGetProperty(key, out var v) && v.ValueKind != JsonValueKind.Null ? v.ToString() : null;
     internal static int? Number(JsonElement e, string key) => int.TryParse(Text(e, key), out var n) ? n : null;
     internal static IEnumerable<JsonElement> Items(JsonElement e, string key) => e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Array ? v.EnumerateArray() : [];
@@ -36,7 +51,7 @@ public sealed class AlacarteMetadataService(AlacarteClient api, ILogger<Alacarte
         return album;
     }
     private static Artist MapArtist(JsonElement e) { var id = Text(e, "id") ?? ""; return new Artist {
-        Id = $"ext-apple-artist-{id}", ExternalProvider = "apple", ExternalId = id, Name = Text(e, "name") ?? "" }; }
+        Id = $"ext-apple-artist-{id}", ExternalProvider = "apple", ExternalId = id, Name = Text(e, "name") ?? "", ImageUrl = Artwork(e) }; }
     public async Task<SearchResult> SearchAllAsync(string query, int songLimit = 20, int albumLimit = 20, int artistLimit = 20)
     {
         try
@@ -77,16 +92,19 @@ public sealed class AlacarteMetadataService(AlacarteClient api, ILogger<Alacarte
     public async Task<Artist?> GetArtistAsync(string externalProvider, string externalId)
     {
         if (externalProvider != "apple") return null;
-        var data = await api.GetAsync($"api/artist/{Uri.EscapeDataString(externalId)}");
-        return data.TryGetProperty("artist", out var artist) ? MapArtist(artist) : null;
+        var data = await ArtistDetailsAsync(externalId);
+        if (!data.TryGetProperty("artist", out var artist)) return null;
+        var mapped = MapArtist(artist);
+        mapped.AlbumCount = Items(data, "albums").Count();
+        return mapped;
     }
     public async Task<List<Album>> GetArtistAlbumsAsync(string externalProvider, string externalId)
     {
         if (externalProvider != "apple") return [];
-        return Items(await api.GetAsync($"api/artist/{Uri.EscapeDataString(externalId)}"), "albums").Select(MapAlbum).ToList();
+        return Items(await ArtistDetailsAsync(externalId), "albums").Select(MapAlbum).ToList();
     }
     public Task<List<ExternalPlaylist>> SearchPlaylistsAsync(string query, int limit = 20) => Task.FromResult(new List<ExternalPlaylist>());
     public Task<ExternalPlaylist?> GetPlaylistAsync(string externalProvider, string externalId) => Task.FromResult<ExternalPlaylist?>(null);
     public Task<List<Song>> GetPlaylistTracksAsync(string externalProvider, string externalId) => Task.FromResult(new List<Song>());
-    public void Dispose() => songs.Dispose();
+    public void Dispose() { songs.Dispose(); artists.Dispose(); }
 }

@@ -156,6 +156,51 @@ public class OctocarteContractTests
     }
 
     [Fact]
+    public async Task ArtistInfoAndDiscographyShareOneRequestAndExposeArtwork()
+    {
+        var calls = 0;
+        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        using var metadata = new AlacarteMetadataService(new AlacarteClient(Factory(async (req, ct) => {
+            Assert.Equal("/api/artist/9", req.RequestUri!.AbsolutePath);
+            Interlocked.Increment(ref calls);
+            await release.Task;
+            return Json("""{"artist":{"id":"9","name":"Artist","artworkTemplate":"https://images.example/{w}x{h}bb.jpg"},"albums":[{"id":"7","name":"Album"}]}""");
+        })));
+        var artistTask = metadata.GetArtistAsync("apple", "9");
+        var albumsTask = metadata.GetArtistAlbumsAsync("apple", "9");
+        release.SetResult();
+        var artist = await artistTask;
+        Assert.NotNull(artist);
+        Assert.Single(await albumsTask);
+        Assert.Equal(1, artist.AlbumCount);
+        Assert.Equal("https://images.example/600x600bb.jpg", artist.ImageUrl);
+        await metadata.GetArtistAsync("apple", "9");
+        Assert.Equal(1, calls);
+        var builder = new SubsonicResponseBuilder();
+        var json = (JsonResult)builder.CreateArtistInfoResponse("json", "artistInfo2", artist);
+        using var document = JsonDocument.Parse(JsonSerializer.Serialize(json.Value));
+        Assert.Equal(artist.ImageUrl, document.RootElement.GetProperty("subsonic-response").GetProperty("artistInfo2").GetProperty("largeImageUrl").GetString());
+        var xml = (ContentResult)builder.CreateArtistInfoResponse("xml", "artistInfo", artist);
+        var ns = XNamespace.Get("http://subsonic.org/restapi");
+        Assert.Equal(artist.ImageUrl, XDocument.Parse(xml.Content!).Root!.Element(ns + "artistInfo")!.Element(ns + "smallImageUrl")!.Value);
+        var searchArtist = new Artist { Id = artist.Id, ExternalProvider = "apple" };
+        using var searchJson = JsonDocument.Parse(JsonSerializer.Serialize(builder.ConvertArtistToJson(searchArtist)));
+        Assert.Equal(artist.Id, searchJson.RootElement.GetProperty("coverArt").GetString());
+        Assert.Equal(artist.Id, builder.ConvertArtistToXml(searchArtist, ns).Attribute("coverArt")!.Value);
+    }
+
+    [Fact]
+    public async Task FailedArtistRequestCanRetry()
+    {
+        var calls = 0;
+        using var metadata = new AlacarteMetadataService(new AlacarteClient(Factory((req, ct) => Task.FromResult(
+            ++calls == 1 ? Json("{}", HttpStatusCode.ServiceUnavailable) : Json("""{"artist":{"id":"9","name":"Artist"},"albums":[]}""")))));
+        await Assert.ThrowsAsync<HttpRequestException>(() => metadata.GetArtistAsync("apple", "9"));
+        Assert.NotNull(await metadata.GetArtistAsync("apple", "9"));
+        Assert.Equal(2, calls);
+    }
+
+    [Fact]
     public async Task AlreadyPresentIsSuccessfulNoOp()
     {
         var api = new AlacarteClient(Factory((req, ct) => Task.FromResult(Json("""{"code":"ALREADY_IN_LIBRARY"}""", HttpStatusCode.Conflict))));

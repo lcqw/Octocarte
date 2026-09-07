@@ -13,7 +13,7 @@ import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-state = {"local": False, "catalog_down": False, "posts": [], "youtube": 0, "local_streams": 0}
+state = {"local": False, "catalog_down": False, "posts": [], "youtube": 0, "local_streams": 0, "artist_calls": 0}
 post_started = threading.Event()
 release_post = threading.Event()
 local_song = {"id": "local-42", "title": "Song", "artist": "Artist", "album": "Album",
@@ -42,6 +42,11 @@ class Fixture(BaseHTTPRequestHandler):
             if state["catalog_down"]:
                 return self.reply({}, 503)
             return self.reply({"songs": [{"id": "42", "name": "Song", "artistName": "Artist", "albumName": "Album", "albumId": "7", "durationMs": 120000}], "albums": [], "artists": []})
+        if path == "/api/artist/9":
+            state["artist_calls"] += 1
+            return self.reply({"artist": {"id": "9", "name": "Artist", "artworkTemplate": "https://images.example/{w}x{h}bb.jpg"}, "albums": [{"id": "7", "name": "Album"}]})
+        if path in ("/rest/getArtistInfo", "/rest/getArtistInfo2"):
+            return self.reply({"subsonic-response": {"status": "ok", path.rsplit("/get", 1)[1][0].lower() + path.rsplit("/get", 1)[1][1:]: {"biography": "local passthrough"}}})
         if path == "/search":
             state["youtube"] += 1
             return self.reply({"video_id": "fixture"})
@@ -118,6 +123,17 @@ try:
     assert songs[0]["albumId"] == "ext-apple-album-7"
     assert songs[0]["suffix"] == "m4a" and songs[0]["contentType"] == "audio/mp4"
     assert "bitDepth" not in songs[0]
+    for endpoint, key in [("getArtistInfo", "artistInfo"), ("getArtistInfo2.view", "artistInfo2")]:
+        with get("/rest/" + endpoint, id="ext-apple-artist-9") as response:
+            info = json.load(response)["subsonic-response"][key]
+        assert info["largeImageUrl"] == "https://images.example/600x600bb.jpg"
+        with get("/rest/" + endpoint, id="local-artist") as response:
+            assert json.load(response)["subsonic-response"][key]["biography"] == "local passthrough"
+    with get("/rest/getArtist", id="ext-apple-artist-9") as response:
+        artist = json.load(response)["subsonic-response"]["artist"]
+    assert artist["albumCount"] == 1 and len(artist["album"]) == 1
+    assert artist["artistImageUrl"] == "https://images.example/600x600bb.jpg"
+    assert state["artist_calls"] == 1
     start = time.monotonic()
     with get("/rest/stream", id="ext-apple-song-42") as response:
         assert response.status == 206

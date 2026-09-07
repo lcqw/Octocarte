@@ -54,3 +54,7 @@ verified private and not a fork.
 Verified shim image tools: Python 3.12.14, yt-dlp 2026.08.19, Deno 2.9.6,
 FFmpeg 7.1.5, Flask 3.1.3, Gunicorn 26.2.0, requests 2.34.2. Build defaults pin
 yt-dlp, Deno and Python package versions to the inspected versions.
+
+Additional upstream master and fix/deezer-private-search histories are preserved
+on private `upstream-snapshot/*` branches. All initially fetched upstream commits
+are reachable from private repository branches/tags.

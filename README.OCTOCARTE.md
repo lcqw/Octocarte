@@ -5,10 +5,11 @@ comes from the separate ALACarte service. Unowned tracks play temporary YouTube
 AAC/M4A while ALACarte acquires their whole parent album using its saved settings.
 Once Navidrome indexes the files, local results and streams take precedence.
 
-**Status:** automated tests, live YouTube streaming and live whole-album ALAC
-acquisition pass. ALACarte also triggered a real Navidrome scan. Local handoff and Wavio acceptance
-remain pending shared-library configuration (Navidrome runs on a separate NAS).
-See [validation](docs/octocarte/VALIDATION.md).
+**Status:** the full backend workflow passed with real services, including native
+ALAC acquisition, an ALACarte-initiated local Navidrome scan, local replacement
+and subsequent native playback/seeking. Wavio local playback/seeking is confirmed;
+external YouTube phone acceptance is still pending.
+NAS deployment requires shared music storage. See [validation](docs/octocarte/VALIDATION.md).
 
 ## Start
 
@@ -60,6 +61,9 @@ validates client credentials with Navidrome and uses them for local lookups.
   External playlist acquisition and starring-to-download are outside this MVP.
 - The original chassis supports other providers, but Octocarte selects ALACarte
   by default. Its legacy download implementations are not used for Apple tracks.
+
+Artist photos use ALACarte artist detail and standard Subsonic image responses.
+For ranked top songs and discovery, see the [optional ALACarte extension](integrations/alacarte/README.md); it is not installed.
 
 ## Verify
 

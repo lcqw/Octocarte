@@ -367,6 +367,39 @@ public class SubsonicController : ControllerBase
         return _responseBuilder.CreateLyricsBySongIdResponse(format, lyrics);
     }
 
+    [HttpGet, HttpPost]
+    [Route("rest/getArtistInfo")]
+    [Route("rest/getArtistInfo.view")]
+    [Route("rest/getArtistInfo2")]
+    [Route("rest/getArtistInfo2.view")]
+    public async Task<IActionResult> GetArtistInfo()
+    {
+        var parameters = await ExtractAllParameters();
+        var id = parameters.GetValueOrDefault("id", "");
+        var format = parameters.GetValueOrDefault("f", "xml");
+        var name = Request.Path.Value?.Contains("getArtistInfo2", StringComparison.OrdinalIgnoreCase) == true ? "artistInfo2" : "artistInfo";
+        if (string.IsNullOrWhiteSpace(id)) return _responseBuilder.CreateError(format, 10, "Missing id parameter");
+        var (external, provider, type, externalId) = _localLibraryService.ParseExternalId(id);
+        if (!external || provider != "apple")
+        {
+            var result = await _proxyService.RelayAsync("rest/get" + char.ToUpperInvariant(name[0]) + name[1..], parameters);
+            return File(result.Body, result.ContentType ?? $"application/{format}");
+        }
+        if (type != "artist")
+        {
+            var artistId = type == "album"
+                ? (await _metadataService.GetAlbumAsync(provider, externalId!))?.ArtistId
+                : (await _metadataService.GetSongAsync(provider, externalId!))?.ArtistId;
+            var parsed = _localLibraryService.ParseExternalId(artistId ?? "");
+            if (!parsed.isExternal || parsed.provider != "apple")
+                return _responseBuilder.CreateArtistInfoResponse(format, name, new Artist());
+            externalId = parsed.externalId;
+        }
+        var artist = await _metadataService.GetArtistAsync(provider, externalId!);
+        if (artist is null) return _responseBuilder.CreateError(format, 70, "Artist not found");
+        return _responseBuilder.CreateArtistInfoResponse(format, name, artist);
+    }
+
     /// <summary>
     /// Merges local and external albums.
     /// </summary>
