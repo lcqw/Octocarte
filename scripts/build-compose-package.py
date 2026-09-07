@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a private AMD64 Compose package with the ALACarte integration included."""
+"""Build AMD64 Octocarte images and matching release-source artifacts."""
 import argparse
 import hashlib
 import json
@@ -14,7 +14,7 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 ALACARTE_REVISION = 'ef9b677c21b024a0acbf4f88d47c4ebff24802fa'
 ALACARTE_URL = 'https://github.com/sosjalapeno/alacarte.git'
-PATCHES = ('top-songs.patch', 'service-auth.patch', 'wrapper-image.patch')
+PATCHES = ('top-songs.patch', 'service-auth.patch', 'wrapper-image.patch', 'source-offer.patch')
 
 
 def run(*args, **kwargs):
@@ -44,7 +44,6 @@ def main():
     parser.add_argument('--output', type=Path, required=True, help='new directory outside the checkout')
     parser.add_argument('--version', required=True, help='unique candidate version, e.g. nas-preview.1')
     parser.add_argument('--alacarte-source', type=Path, help='reuse a local Git object database (read-only)')
-    parser.add_argument('--release', action='store_true', help='prepare registry release artifacts instead of an image archive')
     parser.add_argument('--registry-prefix', default='', help='registry namespace, e.g. ghcr.io/owner')
     args = parser.parse_args()
     if args.registry_prefix and not re.fullmatch(r'[a-z0-9][a-z0-9./_-]*', args.registry_prefix):
@@ -52,8 +51,7 @@ def main():
     prefix = args.registry_prefix.rstrip('/') + '/' if args.registry_prefix else ''
     if not re.fullmatch(r'[a-z0-9][a-z0-9_.-]{0,63}', args.version):
         parser.error('version must be a lowercase Docker tag')
-    names = ['octocarte', 'octocarte-shim', 'octocarte-alacarte', 'octocarte-wrapper']
-    if args.release: names.append('octocarte-init')
+    names = ['octocarte', 'octocarte-shim', 'octocarte-alacarte', 'octocarte-wrapper', 'octocarte-init']
     for name in names:
         if subprocess.run(['docker', 'image', 'inspect', prefix + name + ':' + args.version],
                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL).returncode == 0:
@@ -81,12 +79,21 @@ def main():
             archive(source, ALACARTE_REVISION, alacarte, temp / 'upstream.tar')
             for patch in PATCHES:
                 run('git', '-C', str(alacarte), 'apply', str(app / 'integrations/alacarte' / patch))
+            # Retain the separate service's license and identify this modified version.
+            (alacarte / 'OCTOCARTE-NOTICE.md').write_text(
+                'Modified ALACarte for Octocarte. Changes began 2026-09-07.\n'
+                'Catalog top songs, scoped service authentication, wrapper-image selection and source offer.\n'
+                'AGPL-3.0-only; see LICENSE. No warranty.\n'
+                'Octocarte revision: ' + revision + '\n'
+                'Upstream revision: ' + ALACARTE_REVISION + '\n')
             # Preserve the upstream build; use its lockfiles and pin resolved base images.
             web_dockerfile = alacarte / 'backend/Dockerfile'
-            web_dockerfile.write_text(web_dockerfile.read_text().replace('npm install ', 'npm ci '))
+            web_dockerfile.write_text(web_dockerfile.read_text().replace('npm install ', 'npm ci ') +
+                                     '\nCOPY LICENSE OCTOCARTE-NOTICE.md /usr/share/doc/alacarte/\n'
+                                     'COPY backend/octocarte-source.tar.gz /usr/share/doc/alacarte/alacarte-source.tar.gz\n')
             dockerfiles = [app / 'Dockerfile', app / 'yt-dlp-shim/Dockerfile',
                            web_dockerfile, alacarte / 'wrapper/Dockerfile']
-            if args.release: dockerfiles.append(app / 'deploy/bootstrap/Dockerfile')
+            dockerfiles.append(app / 'deploy/bootstrap/Dockerfile')
             for dockerfile in dockerfiles:
                 text = dockerfile.read_text()
                 for base in re.findall(r'^FROM (\S+)', text, flags=re.MULTILINE):
@@ -102,14 +109,14 @@ def main():
             # Source corresponding to the modified ALACarte image travels with the package.
             with tarfile.open(destination / 'alacarte-source.tar.gz', 'w:gz') as tar:
                 tar.add(alacarte, arcname='alacarte')
+            shutil.copy2(destination / 'alacarte-source.tar.gz', alacarte / 'backend/octocarte-source.tar.gz')
             builds = [
                 ('OCTOCARTE_IMAGE', 'octocarte', app, app / 'Dockerfile'),
                 ('SHIM_IMAGE', 'octocarte-shim', app / 'yt-dlp-shim', app / 'yt-dlp-shim/Dockerfile'),
                 ('ALACARTE_IMAGE', 'octocarte-alacarte', alacarte, web_dockerfile),
                 ('WRAPPER_IMAGE', 'octocarte-wrapper', alacarte / 'wrapper', alacarte / 'wrapper/Dockerfile'),
             ]
-            if args.release:
-                builds.append(('INIT_IMAGE', 'octocarte-init', app, app / 'deploy/bootstrap/Dockerfile'))
+            builds.append(('INIT_IMAGE', 'octocarte-init', app, app / 'deploy/bootstrap/Dockerfile'))
             for key, name, context, dockerfile in builds:
                 tag = prefix + name + ':' + args.version
                 run('docker', 'build', '--platform', 'linux/amd64', '-t', tag,
@@ -119,24 +126,13 @@ def main():
                     '--label', 'org.opencontainers.image.version=' + args.version,
                     '-f', str(dockerfile), str(context))
                 manifest['images'][key] = {'tag': tag, 'id': output('docker', 'image', 'inspect', tag, '--format', '{{.Id}}')}
-            navidrome = 'deluan/navidrome:0.63.2'
-            run('docker', 'pull', '--platform', 'linux/amd64', navidrome)
-            manifest['images']['NAVIDROME_IMAGE'] = {'tag': navidrome, 'id': output('docker', 'image', 'inspect', navidrome, '--format', '{{.Id}}')}
-            if args.release:
-                for name in ('compose.yml', 'compose.existing-navidrome.yml', '.env.example'):
-                    # GitHub normalizes dot-prefixed asset names on upload.
-                    asset_name = 'env.example' if name == '.env.example' else name
-                    shutil.copy2(app / name, destination / asset_name)
-                # Compact source archive for release asset uploads.
-                with tarfile.open(destination / 'octocarte-source.tar.gz', 'w:gz') as tar:
-                    tar.add(app, arcname='octocarte')
-                (destination / 'octocarte-source.tar').unlink()
-            else:
-                for item in (app / 'deploy').iterdir():
-                    if item.is_file() and item.name != 'IMPLEMENTATION_PLAN.md':
-                        shutil.copy2(item, destination / item.name)
-                (destination / 'manage.sh').chmod(0o755)
-                run('docker', 'save', '-o', str(destination / 'images.tar'), *(v['tag'] for v in manifest['images'].values()))
+            for name in ('compose.yml', '.env.example'):
+                # GitHub normalizes dot-prefixed asset names on upload.
+                asset_name = 'env.example' if name == '.env.example' else name
+                shutil.copy2(app / name, destination / asset_name)
+            with tarfile.open(destination / 'octocarte-source.tar.gz', 'w:gz') as tar:
+                tar.add(app, arcname='octocarte')
+            (destination / 'octocarte-source.tar').unlink()
             write_image_environment(destination / 'images.env', manifest['images'])
             (destination / 'images.lock.json').write_text(json.dumps(manifest, indent=2) + '\n')
             checksums = []

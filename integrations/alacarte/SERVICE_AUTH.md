@@ -94,8 +94,7 @@ To rotate it, generate a replacement file and atomically rename it to `token` in
 the dedicated mounted directory. To revoke it, remove that file. New clients in
 Octocarte reread it, and ALACarte validates it on each API request.
 
-Rolling back means selecting the validated images and restoring the previous
-cookie-file configuration. Do not reuse ALACarte's master secret to mint cookies
+Rolling back means selecting the previous images and their matching configuration. Do not reuse ALACarte's master secret to mint cookies
 or service tokens. This feature only addresses Octocarte-to-ALACarte access;
 Apple may still require a new login or renewed media-user-token independently.
 

@@ -44,7 +44,6 @@ jobs:
       - name: Test application and initialization
         run: |
           dotnet test --configuration Release
-          python3 tests/test_compose_package.py
           python3 tests/test_simple_compose.py
       - name: Log in to GitHub Container Registry
         uses: docker/login-action@v3
@@ -62,14 +61,13 @@ jobs:
           done
       - name: Build pinned source and prepare release artifacts
         run: |
-          python3 scripts/build-compose-package.py --release --registry-prefix "$REGISTRY_PREFIX" --version "$RELEASE_VERSION" --output "$RUNNER_TEMP/octocarte-release"
-      - name: Test both installation paths and the stream contract
+          python3 scripts/build-compose-package.py --registry-prefix "$REGISTRY_PREFIX" --version "$RELEASE_VERSION" --output "$RUNNER_TEMP/octocarte-release"
+      - name: Test independent Navidrome integration and the stream contract
         env:
           OCTOCARTE_TEST_SERVICE_AUTH: '1'
         run: |
           OCTOCARTE_TEST_IMAGE="$REGISTRY_PREFIX/octocarte:$RELEASE_VERSION" python3 tests/http_mvp.py
-          python3 tests/simple_compose_smoke.py --image-base "$REGISTRY_PREFIX/octocarte" --version "$RELEASE_VERSION" --mode full
-          python3 tests/simple_compose_smoke.py --image-base "$REGISTRY_PREFIX/octocarte" --version "$RELEASE_VERSION" --mode existing
+          python3 tests/simple_compose_smoke.py --image-base "$REGISTRY_PREFIX/octocarte" --version "$RELEASE_VERSION" --source-archive "$RUNNER_TEMP/octocarte-release/alacarte-source.tar.gz"
       - name: Publish tested images and record registry digests
         run: |
           python3 scripts/publish-release-images.py "$RUNNER_TEMP/octocarte-release"
@@ -79,9 +77,9 @@ jobs:
             docker image rm "$REGISTRY_PREFIX/$image:$RELEASE_VERSION"
             docker pull "$REGISTRY_PREFIX/$image:$RELEASE_VERSION"
           done
-          python3 tests/simple_compose_smoke.py --image-base "$REGISTRY_PREFIX/octocarte" --version "$RELEASE_VERSION" --mode full
+          python3 tests/simple_compose_smoke.py --image-base "$REGISTRY_PREFIX/octocarte" --version "$RELEASE_VERSION" --source-archive "$RUNNER_TEMP/octocarte-release/alacarte-source.tar.gz"
       - name: Create a draft prerelease
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release create "v$RELEASE_VERSION" --verify-tag --draft --prerelease --title "Octocarte $RELEASE_VERSION" --notes-file "docs/releases/$RELEASE_VERSION.md" "$RUNNER_TEMP/octocarte-release/"*.tar.gz "$RUNNER_TEMP/octocarte-release/"*.json "$RUNNER_TEMP/octocarte-release/compose.yml" "$RUNNER_TEMP/octocarte-release/compose.existing-navidrome.yml" "$RUNNER_TEMP/octocarte-release/env.example" "$RUNNER_TEMP/octocarte-release/images.env" "$RUNNER_TEMP/octocarte-release/SHA256SUMS"
+          gh release create "v$RELEASE_VERSION" --verify-tag --draft --prerelease --title "Octocarte $RELEASE_VERSION" --notes-file "docs/releases/$RELEASE_VERSION.md" "$RUNNER_TEMP/octocarte-release/"*.tar.gz "$RUNNER_TEMP/octocarte-release/"*.json "$RUNNER_TEMP/octocarte-release/compose.yml" "$RUNNER_TEMP/octocarte-release/env.example" "$RUNNER_TEMP/octocarte-release/images.env" "$RUNNER_TEMP/octocarte-release/SHA256SUMS"

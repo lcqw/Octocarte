@@ -38,7 +38,6 @@ jobs:
           python3 tests/http_mvp.py
           OCTOCARTE_TEST_SERVICE_AUTH=1 python3 tests/http_mvp.py
           python3 tests/test_secret_file.py
-          python3 tests/test_compose_package.py
           python3 tests/test_simple_compose.py
 
   shim-tests:
@@ -69,9 +68,10 @@ jobs:
           git -C alacarte-source apply ../integrations/alacarte/top-songs.patch
           git -C alacarte-source apply ../integrations/alacarte/service-auth.patch
           git -C alacarte-source apply ../integrations/alacarte/wrapper-image.patch
+          git -C alacarte-source apply ../integrations/alacarte/source-offer.patch
       - name: Check ALACarte extension
         working-directory: alacarte-source/backend
         run: |
           npm ci --ignore-scripts --no-audit --no-fund
           npm run lint:syntax
-          node --test test/artistTopSongs*.test.mjs test/integrationAuth*.test.mjs
+          node --test test/artistTopSongs*.test.mjs test/integrationAuth*.test.mjs test/octocarteSource.test.mjs

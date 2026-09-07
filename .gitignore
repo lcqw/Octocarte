@@ -88,7 +88,6 @@ Icon[]
 secrets/
 .env.*
 !.env.example
-!.env.upstream.example
 !.env.octocarte.example
 __pycache__/
 .pytest_cache/
