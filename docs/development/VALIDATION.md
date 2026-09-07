@@ -4,7 +4,7 @@
 
 The `v0.0.5-alpha.1` release passed 692 .NET tests, the controlled HTTP streaming
 fixture, clean full-stack installation and existing-Navidrome integration tests.
-Five images were published privately to GHCR, downloaded again and tested with
+Five images were published to GHCR, downloaded again and tested with
 fresh startup. Matching release-source/configuration assets verified against their
 checksums. CI also covers the shim and ALACarte integration patches.
 
@@ -36,7 +36,6 @@ installation was not changed by repository cleanup. Long-term use remains ongoin
 Wavio prefetching can request lossy Opus for ALAC; disabling prefetching resolved
 that report. The user subsequently selected lossless FLAC in ALACarte. Navic
 playback had an unresolved compatibility report. See [client notes](../CLIENTS.md).
-Public image redistribution remains subject to the [license review](LICENSING.md).
 
 ## Standalone cleanup candidate
 
