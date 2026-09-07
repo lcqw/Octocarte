@@ -42,7 +42,7 @@ def archive(source, revision, destination, tar_path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True, help='new directory outside the checkout')
-    parser.add_argument('--version', required=True, help='unique version, e.g. 0.0.5-alpha.2')
+    parser.add_argument('--version', required=True, help='unique version, e.g. 0.0.6')
     parser.add_argument('--alacarte-source', type=Path, help='reuse a local Git object database (read-only)')
     parser.add_argument('--registry-prefix', default='', help='registry namespace, e.g. ghcr.io/owner')
     args = parser.parse_args()
@@ -50,7 +50,7 @@ def main():
         parser.error('invalid registry prefix')
     prefix = args.registry_prefix.rstrip('/') + '/' if args.registry_prefix else ''
     if not re.fullmatch(r'[0-9]+\.[0-9]+\.[0-9]+(?:-[a-z0-9-]+(?:\.[a-z0-9-]+)*)?', args.version) or len(args.version) > 64:
-        parser.error('version must be a .NET-compatible release tag, e.g. 0.0.5-alpha.2')
+        parser.error('version must be a .NET-compatible release tag, e.g. 0.0.6')
     names = ['octocarte', 'octocarte-shim', 'octocarte-alacarte', 'octocarte-wrapper', 'octocarte-init']
     for name in names:
         if subprocess.run(['docker', 'image', 'inspect', prefix + name + ':' + args.version],
