@@ -22,6 +22,7 @@ WORKDIR /app
 RUN mkdir -p /app/downloads
 
 COPY --from=build /app/publish .
+COPY LICENSE NOTICE.md /usr/share/doc/octocarte/
 
 EXPOSE 8080
 ENV ASPNETCORE_URLS=http://+:8080

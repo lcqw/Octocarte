@@ -3,7 +3,7 @@
 Octocarte is maintained as an independent project derived from Octo-Fiesta.
 Preserve upstream history, copyright notices and license terms. Keep ALACarte
 extensions separate from Octocarte and retain their AGPL-3.0-only attribution.
-The initial provider scope and validation limits are documented in README.md.
+The initial provider scope and validation limits are documented in [README](../README.md).
 
 ## Changes
 
@@ -45,3 +45,17 @@ Before public release, review full Git history and release artifacts for
 credentials and installation-specific data; verify attribution and redistribution
 requirements for included components; and reproduce installation from the
 published instructions. Passing the MVP does not establish long-term stability.
+
+## Build and test
+
+Run `dotnet test --configuration Release` with .NET 9. The YouTube shim tests use
+pytest. CI applies the ALACarte patches to the pinned source and runs its tests.
+For deployment contracts run `python3 tests/test_simple_compose.py`;
+`python3 tests/simple_compose_smoke.py` performs isolated container validation
+using locally available images. See [validation](../docs/development/VALIDATION.md).
+
+Release maintenance uses `scripts/build-compose-package.py --version VERSION
+--output /new/output/path` to prepare pinned images and matching source assets.
+Run this from a clean commit. Use a new version; existing image tags are never
+overwritten. Publication is manual and separate from a build. Resolve the
+[distribution review](../docs/development/LICENSING.md) before public release.

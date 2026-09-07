@@ -17,9 +17,9 @@ the repository or its images public. Container publication and visibility change
 are separate operations.
 
 The release workflow is manually dispatched on a tag matching `VERSION`. It
-builds pinned sources, runs both installation checks, publishes versioned images,
+builds pinned sources, tests independently managed Navidrome integration, publishes versioned images,
 pulls them back for another startup check, and creates a draft prerelease with
-source archives, Compose examples and the image manifest. An existing published
+source archives, the Compose configuration and the image manifest. An existing published
 version must not be overwritten. A failed partial publication needs inspection
 before choosing a new version or recovery procedure.
 

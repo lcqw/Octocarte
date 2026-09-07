@@ -7,9 +7,7 @@ import secrets
 import stat
 
 
-def initialize(auth: Path, navidrome: Path | None, uid: int, gid: int):
-    if uid < 0 or gid < 0:
-        raise ValueError('Container user/group IDs must be nonnegative')
+def initialize(auth: Path):
     if auth.is_symlink():
         raise ValueError('Authentication storage must be a directory')
     auth.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -35,17 +33,8 @@ def initialize(auth: Path, navidrome: Path | None, uid: int, gid: int):
                 file.write(secrets.token_urlsafe(32) + '\n')
                 file.flush()
                 os.fsync(file.fileno())
-    if navidrome is not None:
-        if navidrome.is_symlink():
-            raise ValueError('Navidrome storage must be a directory')
-        navidrome.mkdir(mode=0o750, parents=True, exist_ok=True)
-        # Only this volume's root: never recursively change a library or database.
-        os.chown(navidrome, uid, gid)
     print('Service storage is ready. Existing integration credentials retained.')
 
 
 if __name__ == '__main__':
-    nav = os.environ.get('NAVIDROME_DATA_DIR')
-    initialize(Path('/auth'), Path(nav) if nav else None,
-               int(os.environ.get('NAVIDROME_UID', '1000')),
-               int(os.environ.get('NAVIDROME_GID', '10')))
+    initialize(Path('/auth'))

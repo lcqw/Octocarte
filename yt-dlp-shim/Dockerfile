@@ -49,6 +49,7 @@ RUN pip install --no-cache-dir flask==3.1.3 gunicorn==26.2.0 requests==2.34.2
 # it here is a ModuleNotFoundError at startup and total loss of playback. The
 # shim image is never built in CI, so nothing else would catch that.
 COPY app.py gate.py /app/
+COPY LICENSE NOTICE.md /usr/share/doc/octocarte-shim/
 
 EXPOSE 8080
 

@@ -1,0 +1,106 @@
+diff --git a/backend/routes/octocarteSource.mjs b/backend/routes/octocarteSource.mjs
+new file mode 100644
+index 0000000..45cbaf0
+--- /dev/null
++++ b/backend/routes/octocarteSource.mjs
+@@ -0,0 +1,14 @@
++// Octocarte modification, 2026-09-07. AGPL-3.0-only; see LICENSE.
++import express from 'express'
++
++export function createSourceRouter(archivePath = '/usr/share/doc/alacarte/alacarte-source.tar.gz') {
++  const router = express.Router()
++  router.get('/octocarte-source.tar.gz', (_req, res) => {
++    res.download(archivePath, 'alacarte-source.tar.gz', (error) => {
++      if (error && !res.headersSent) {
++        res.status(503).json({ error: 'Build source archive is unavailable' })
++      }
++    })
++  })
++  return router
++}
+diff --git a/backend/server.mjs b/backend/server.mjs
+index abfb818..b40e774 100644
+--- a/backend/server.mjs
++++ b/backend/server.mjs
+@@ -1,4 +1,5 @@
+ import express from 'express'
++import { createSourceRouter } from './routes/octocarteSource.mjs'
+ import cookieParser from 'cookie-parser'
+ import helmet from 'helmet'
+ import { fileURLToPath } from 'node:url'
+@@ -99,6 +100,8 @@ app.use((req, _res, next) => {
+ 
+ // Auth router is mounted before the guard so /state, /setup, and /login
+ // remain reachable for bootstrap. The guard then protects everything else.
++// The immutable build source is available before login; no runtime data is served.
++app.use(createSourceRouter())
+ app.use('/api/auth', authRouter)
+ app.use(requireAuth())
+ 
+diff --git a/backend/test/octocarteSource.test.mjs b/backend/test/octocarteSource.test.mjs
+new file mode 100644
+index 0000000..c76dcc2
+--- /dev/null
++++ b/backend/test/octocarteSource.test.mjs
+@@ -0,0 +1,37 @@
++import assert from 'node:assert/strict'
++import { test } from 'node:test'
++import { mkdtemp, writeFile, rm } from 'node:fs/promises'
++import { tmpdir } from 'node:os'
++import path from 'node:path'
++import express from 'express'
++import { createSourceRouter } from '../routes/octocarteSource.mjs'
++
++test('source is public and exact; unrelated paths remain protected', async () => {
++  const dir = await mkdtemp(path.join(tmpdir(), 'octocarte-source-test-'))
++  const archive = path.join(dir, 'source.tar.gz')
++  const bytes = Buffer.from('controlled build source fixture')
++  await writeFile(archive, bytes)
++  const app = express()
++  app.use(createSourceRouter(archive))
++  app.use((_req, res) => res.sendStatus(401))
++  const server = app.listen(0, '127.0.0.1')
++  await new Promise(resolve => server.once('listening', resolve))
++  const base = `http://127.0.0.1:${server.address().port}`
++  try {
++    const response = await fetch(base + '/octocarte-source.tar.gz')
++    assert.equal(response.status, 200)
++    assert.match(response.headers.get('content-disposition'), /attachment.*alacarte-source/)
++    assert.deepEqual(Buffer.from(await response.arrayBuffer()), bytes)
++    for (const endpoint of ['/api/settings', '/config/settings.json', '/octocarte-source.tar.gz/extra']) {
++      assert.equal((await fetch(base + endpoint)).status, 401)
++    }
++    assert.equal((await fetch(base + '/octocarte-source.tar.gz', {method:'POST'})).status, 401)
++    await rm(archive)
++    const missing = await fetch(base + '/octocarte-source.tar.gz')
++    assert.equal(missing.status, 503)
++    assert.equal((await missing.text()).includes(dir), false)
++  } finally {
++    await new Promise(resolve => server.close(resolve))
++    await rm(dir, {recursive:true, force:true})
++  }
++})
+diff --git a/frontend/src/App.tsx b/frontend/src/App.tsx
+index 8f7925c..a646e68 100644
+--- a/frontend/src/App.tsx
++++ b/frontend/src/App.tsx
+@@ -46,6 +46,19 @@ function limitsFromState(state: AuthState): AuthLimits {
+ }
+ 
+ export default function App() {
++  return (
++    <>
++      <div className="border-b border-white/10 px-4 py-2 text-center text-xs text-white/70">
++        <a href="/octocarte-source.tar.gz" className="underline underline-offset-2 hover:text-white">
++          ALACarte source (AGPLv3) · includes Octocarte integration changes
++        </a>
++      </div>
++      <AppContent />
++    </>
++  )
++}
++
++function AppContent() {
+   const [gate, setGate] = useState<AuthGate>({ status: 'loading' })
+   const [bootError, setBootError] = useState<string | null>(null)
+ 

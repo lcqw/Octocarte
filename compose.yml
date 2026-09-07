@@ -1,5 +1,4 @@
 name: octocarte
-
 x-logging: &logging
   driver: json-file
   options:
@@ -12,33 +11,8 @@ services:
     restart: "no"
     network_mode: none
     logging: *logging
-    environment:
-      NAVIDROME_UID: ${NAVIDROME_UID:-1000}
-      NAVIDROME_GID: ${NAVIDROME_GID:-10}
-      NAVIDROME_DATA_DIR: /navidrome
     volumes:
       - integration-auth:/auth
-      - navidrome-data:/navidrome
-
-  navidrome:
-    image: deluan/navidrome:0.63.2
-    user: "${NAVIDROME_UID:-1000}:${NAVIDROME_GID:-10}"
-    restart: unless-stopped
-    logging: *logging
-    ports:
-      - "${HOST_BIND:-127.0.0.1}:${NAVIDROME_PORT:-4533}:4533"
-    environment:
-      ND_LOGLEVEL: info
-      ND_ENABLEINSIGHTSCOLLECTOR: "false"
-    volumes:
-      - navidrome-data:/data
-      - type: bind
-        source: ${MUSIC_DIR:?Set MUSIC_DIR in .env to an existing absolute music-folder path}
-        target: /music
-        read_only: true
-        bind: {create_host_path: false}
-    depends_on:
-      initialize: {condition: service_completed_successfully}
 
   octocarte:
     image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/vixxy0w0/octocarte}:${OCTOCARTE_VERSION:-0.0.5-alpha.1}
@@ -48,7 +22,7 @@ services:
       - "${HOST_BIND:-127.0.0.1}:${OCTOCARTE_PORT:-5274}:8080"
     environment:
       Subsonic__MusicService: Alacarte
-      Subsonic__Url: ${NAVIDROME_URL:-http://navidrome:4533}
+      Subsonic__Url: ${NAVIDROME_URL:?Set NAVIDROME_URL in .env to your existing server}
       Subsonic__EnableExternalPlaylists: "false"
       Subsonic__AutoUpgradeQuality: "false"
       Alacarte__Url: http://alacarte:7373
@@ -140,7 +114,6 @@ services:
       - /dev/zero:/app/rootfs/dev/zero
 
 volumes:
-  navidrome-data:
   octocarte-state:
   alacarte-data:
   wrapper-data:

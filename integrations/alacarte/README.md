@@ -26,8 +26,13 @@ Octocarte communicates through HTTP and leaves preferences under ALACarte's cont
 The build helper applies these changes to sosjalapeno/alacarte revision
 `ef9b677c21b024a0acbf4f88d47c4ebff24802fa`. ALACarte and these patches are
 AGPL-3.0-only; the license is preserved here, and modified ALACarte source ships
-in the private package. Build dependencies are resolved to image digests and
+with release artifacts. Build dependencies are resolved to image digests and
 recorded in its manifest. Future upstream updates need patch and contract tests.
+
+- **Source offer:** `source-offer.patch` adds a visible download link on the login
+  screen and application. Future images serve their matching patched source
+  archive at `/octocarte-source.tar.gz` without requiring an account. This fixed
+  build artifact contains no runtime settings, music or credentials.
 
 ## Development and compatibility
 
@@ -39,11 +44,16 @@ afresh. Ordinary search results are never presented as popularity rankings.
 For development, apply the patches in the order listed above and run the ALACarte
 backend tests. The package build performs patching automatically.
 
-The older [external-service setup](../../docs/octocarte/EXTERNAL_SERVICES.md) can
-connect to stock ALACarte using a session cookie. In that case photos still work,
-while top songs fall back to Navidrome. The historical [image override](compose.image.yml)
-was used during MVP validation; it is not part of normal installation.
-
 Sources: [ALACarte](https://github.com/sosjalapeno/alacarte),
 [Apple artist views](https://developer.apple.com/documentation/applemusicapi/artists/views-data.dictionary),
 [OpenSubsonic getTopSongs](https://opensubsonic.netlify.app/docs/endpoints/gettopsongs/).
+
+## Modification notice
+
+Octocarte integration changes, 2026-09-07: ranked top-song catalog reads, scoped
+service authentication wrapper-image selection and source availability. The patches modify the pinned
+ALACarte version identified above and remain AGPL-3.0-only. Later changes are
+dated in Git history. No warranty is provided; see [LICENSE](LICENSE).
+
+Public distribution and the modified service's source offer still require the
+work recorded in the [distribution review](../../docs/development/LICENSING.md).
