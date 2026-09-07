@@ -14,6 +14,23 @@ spec.loader.exec_module(initialize)
 
 
 class PackageTests(unittest.TestCase):
+    def test_exported_image_names_do_not_depend_on_builder_store_ids(self):
+        spec = importlib.util.spec_from_file_location('package_builder', ROOT / 'scripts/build-compose-package.py')
+        builder = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(builder)
+        with tempfile.TemporaryDirectory() as directory:
+            env_file = Path(directory) / 'images.env'
+            images = {'SHIM_IMAGE': {'tag': 'octocarte-shim:nas-preview.2', 'id': 'sha256:' + '1' * 64},
+                      'NAVIDROME_IMAGE': {'tag': 'deluan/navidrome:0.63.2', 'id': 'sha256:' + '2' * 64}}
+            builder.write_image_environment(env_file, images)
+            before = env_file.read_text()
+            # The destination may report config digests instead of index digests.
+            images['SHIM_IMAGE']['id'] = 'sha256:' + '3' * 64
+            builder.write_image_environment(env_file, images)
+            self.assertEqual(env_file.read_text(), before)
+            self.assertEqual(before, 'SHIM_IMAGE=octocarte-shim:nas-preview.2\nNAVIDROME_IMAGE=deluan/navidrome:0.63.2\n')
+
+
     def test_initialization_retains_data_and_credential(self):
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -44,7 +61,7 @@ class PackageTests(unittest.TestCase):
     def test_compose_storage_and_service_boundaries(self):
         env = dict(os.environ, DATA_DIR='/tmp/octocarte-test-data', MUSIC_DIR='/tmp/octocarte-test-music')
         for key in ('NAVIDROME_IMAGE', 'OCTOCARTE_IMAGE', 'ALACARTE_IMAGE', 'SHIM_IMAGE', 'WRAPPER_IMAGE'):
-            env[key] = 'sha256:' + '1' * 64
+            env[key] = 'octocarte-test/' + key.lower() + ':preview'
         config = json.loads(subprocess.check_output(
             ['docker', 'compose', '-f', str(ROOT / 'deploy/compose.yml'), 'config', '--format', 'json'], env=env))
         services = config['services']

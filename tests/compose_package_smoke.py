@@ -80,7 +80,7 @@ with tempfile.TemporaryDirectory(prefix=project) as directory:
         run(*(common + ['-f', str(package / 'initialize.compose.yml'), 'run', '--rm', 'initialize']))
         assert token_path.read_text().strip() == token, 'Initialization rotated an existing token'
         # Generate a real, silent ALAC file as a harmless shared-storage fixture.
-        run('docker', 'run', '--rm', '--network', 'none', '-v', str(music) + ':/music', images['SHIM_IMAGE']['id'],
+        run('docker', 'run', '--rm', '--network', 'none', '-v', str(music) + ':/music', images['SHIM_IMAGE']['tag'],
             'ffmpeg', '-loglevel', 'error', '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=stereo', '-t', '2',
             '-c:a', 'alac', '-metadata', 'title=Octocarte storage fixture', '-metadata', 'artist=Fixture Artist',
             '-metadata', 'album=Fixture Album', '/music/fixture.m4a')
@@ -136,5 +136,5 @@ with tempfile.TemporaryDirectory(prefix=project) as directory:
     finally:
         subprocess.run(compose + ['down', '--remove-orphans'], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         # Generated container-owned state only, never user data.
-        run('docker', 'run', '--rm', '--network', 'none', '-v', str(root) + ':/test-state', images['SHIM_IMAGE']['id'],
+        run('docker', 'run', '--rm', '--network', 'none', '-v', str(root) + ':/test-state', images['SHIM_IMAGE']['tag'],
             'python', '-c', "import shutil; shutil.rmtree('/test-state/data', ignore_errors=True); shutil.rmtree('/test-state/music', ignore_errors=True)")

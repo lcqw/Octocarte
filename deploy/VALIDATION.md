@@ -43,3 +43,14 @@ results are recorded in the Octocarte source at `docs/octocarte/VALIDATION.md`.
 This is an installation and integration check, not a claim of complete security
 coverage or long-term reliability. Each package's `images.lock.json` identifies
 its exact images and source revisions; retain it with the image archive.
+
+## NAS image-store compatibility correction
+
+The first NAS attempt could not resolve a builder-specific `sha256` image ID,
+so initialization never created the service directories. Archive inspection
+confirmed that its versioned RepoTags were present while classic image config
+identifiers differed from the builder's reported IDs. The package now references
+those saved tags with `pull_policy: never`; builder IDs remain traceability
+metadata only. A regression test covers differing store IDs. This corrects a
+portability gap in the original same-host export/import check. NAS acceptance
+must still be completed on the user's actual Docker installation.
