@@ -13,7 +13,7 @@ selected. The current track is excluded from that prefetch window. See the
 
 Navidrome web playback was reported working through lossless ALAC-to-FLAC
 conversion. This does not establish direct ALAC decoding support in every client.
-Navic playback failed in that trial; its cause has not been isolated.
+Navic has also been confirmed working with Octocarte in a subsequent test.
 
 ALACarte can optionally convert acquired ALAC to FLAC using its own quality
 setting. Both are lossless formats. Lower compressed bitrate after that conversion
