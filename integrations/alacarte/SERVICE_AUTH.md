@@ -1,8 +1,9 @@
 # Unattended ALACarte authentication
 
-Status: candidate implementation on `feature/alacarte-service-auth`. The
-validated deployment continues to use its existing session cookie. This change
-has not been installed into the working ALACarte or Octocarte services.
+The [complete package](../../deploy/README.md) provisions this credential
+automatically. These details are for maintenance and existing-service migrations.
+The original Wavio-validated deployment used a cookie; its running services are
+not changed by building or merging the new package.
 
 ## Contract
 
@@ -65,8 +66,8 @@ volumes:
 ```
 
 Use the same absolute host directory when the services belong to different
-Compose projects. These are additions to the service definitions, not a complete
-NAS deployment. Remove the old cookie mount and cookie setting when migrating
+Compose projects. These manual additions are only for existing-service migrations; the complete
+package already includes them. Remove the old cookie mount and cookie setting when migrating
 that deployment to token authentication. Octocarte gives ServiceTokenFile
 priority if both settings exist. Cookie-only deployments remain compatible.
 

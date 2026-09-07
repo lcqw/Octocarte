@@ -12,37 +12,26 @@ artist photos/top songs and unowned playback. Entergalactic completed as a full
 15-track native ALAC album. Temporary local validation services were cleaned up.
 NAS deployment requires shared music storage. See [validation](docs/octocarte/VALIDATION.md).
 
-## Start
+## Install
 
-1. Keep your existing ALACarte and Navidrome services running. ALACarte owns all
-   Apple settings, credentials, library management and Navidrome scans. Its music
-   output must be visible to Navidrome: use the same shared storage when they run
-   on different machines. A scan cannot transfer files between hosts.
-2. Copy `.env.octocarte.example` to `.env.octocarte` and set the three connection
-   values. A container cannot reach host ALACarte using `127.0.0.1`; use
-   `http://host.docker.internal:7373` on this Linux host.
-3. Put only the `alacarte_session` cookie **value** in the secret file referenced
-   by `ALACARTE_COOKIE_FILE`; use mode `600`. For this installation the file is
-   `./secrets/alacarte-cookie` (or another local secret-file path). Octocarte reads it when
-   constructing ALACarte clients. After rotating the file, recreate the service
-   with `docker compose --env-file .env.octocarte -f compose.octocarte.yml up -d --force-recreate octocarte`
-   so an atomically replaced file is remounted. Never commit its contents.
-   Never use ALACarte's master `.secret`. An empty file works only when ALACarte
-   already uses its own externally managed authentication configuration.
-4. Run:
+The [complete Compose package](deploy/README.md) is the standard installation.
+It includes Octocarte, Navidrome, the YouTube shim, and ALACarte with its wrapper.
+**Artist photos, Apple-ranked top songs, and unattended service authentication
+are included.** No manual extension installation or browser-cookie copying is
+required. The package generates a private integration token during initialization.
 
-   ```sh
-   docker compose --env-file .env.octocarte -f compose.octocarte.yml up -d --build
-   ```
+For the private NAS preview, a build helper prepares the images and a transferable
+bundle. Install that bundle on the Docker host, choose the shared music folder,
+and complete the normal Navidrome and ALACarte account setup in their UIs.
+Public container images are not published yet. See the [installation steps](deploy/README.md).
 
-5. Point Wavio at port `5880` on the Octocarte host, using your normal Navidrome
-   client credentials. The default bind is loopback. Set `OCTOCARTE_BIND` to your
-   private LAN interface address if Wavio runs on another device.
+ALACarte remains a separate service inside the same Compose project and owns
+Apple credentials, preferences, acquisition, library management and scans.
+Its music output and Navidrome's library mount point to the same host folder.
+Clients connect to Octocarte using their Navidrome account.
 
-The shim has no published host port or music-library mount. Octocarte mounts
-only its own state volume, not ALACarte's music or configuration directories.
-No Navidrome administrator credentials are needed in Compose; the chassis
-validates client credentials with Navidrome and uses them for local lookups.
+Already running both services? The [external-service setup](docs/octocarte/EXTERNAL_SERVICES.md)
+is retained for that use case; stock ALACarte has fewer integration capabilities.
 
 ## Behavior and boundaries
 
@@ -64,7 +53,8 @@ validates client credentials with Navidrome and uses them for local lookups.
   by default. Its legacy download implementations are not used for Apple tracks.
 
 Artist photos use ALACarte artist detail and standard Subsonic image responses.
-Ranked artist top songs are available through the [optional ALACarte extension](integrations/alacarte/README.md), installed in this local validation setup.
+Ranked artist top songs are included through the prepared ALACarte image.
+The [integration notes](integrations/alacarte/README.md) describe the small maintained patches for contributors.
 Apple ranking is retained while matching native Navidrome tracks take precedence.
 
 ## Verify
