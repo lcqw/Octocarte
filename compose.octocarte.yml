@@ -1,0 +1,46 @@
+name: octocarte
+services:
+  octocarte:
+    build: .
+    restart: unless-stopped
+    ports:
+      - "${OCTOCARTE_BIND:-127.0.0.1}:${OCTOCARTE_PORT:-5880}:8080"
+    environment:
+      Subsonic__MusicService: Alacarte
+      Subsonic__Url: ${NAVIDROME_URL:?Set NAVIDROME_URL}
+      Subsonic__EnableExternalPlaylists: "false"
+      Subsonic__AutoUpgradeQuality: "false"
+      Alacarte__Url: ${ALACARTE_URL:?Set ALACARTE_URL}
+      Alacarte__SessionCookieFile: /run/secrets/alacarte_cookie
+      YouTube__ShimUrl: http://yt-dlp-shim:8080
+      Library__DownloadPath: /app/state
+    secrets:
+      - alacarte_cookie
+    volumes:
+      - octocarte-state:/app/state
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      yt-dlp-shim:
+        condition: service_healthy
+  yt-dlp-shim:
+    build:
+      context: ./yt-dlp-shim
+    restart: unless-stopped
+    environment:
+      YTDLP_AUDIO_FORMAT: "140/bestaudio[ext=m4a][acodec^=mp4a]"
+      XDG_CACHE_HOME: /cache
+    volumes:
+      - ytdlp-cache:/cache
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/health', timeout=3)"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+secrets:
+  alacarte_cookie:
+    file: ${ALACARTE_COOKIE_FILE:?Set path to ALACarte session-cookie file (empty file for externally authenticated ALACarte)}
+volumes:
+  octocarte-state:
+  ytdlp-cache:

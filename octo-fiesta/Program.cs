@@ -1,3 +1,5 @@
+using octo_fiesta.Services.Alacarte;
+using octo_fiesta.Services.YouTube;
 using octo_fiesta.Models.Settings;
 using octo_fiesta.Services;
 using octo_fiesta.Services.Deezer;
@@ -23,6 +25,8 @@ if (TidalLoginCommand.IsRequested(args))
 
 // Add services to the container.
 
+builder.Logging.AddFilter("System.Net.Http.HttpClient", LogLevel.None);
+builder.Logging.AddFilter("Microsoft.AspNetCore.Hosting.Diagnostics", LogLevel.Warning);
 builder.Services.AddControllers();
 builder.Services.AddHttpClient();
 builder.Services.AddEndpointsApiExplorer();
@@ -80,7 +84,32 @@ builder.Services.AddHttpClient(LrclibLyricsService.HttpClientName, client =>
 // Register music service based on configuration
 // IMPORTANT: Primary service MUST be registered LAST because ASP.NET Core DI
 // will use the last registered implementation when injecting IMusicMetadataService/IDownloadService
-if (musicService == MusicService.Qobuz)
+if (musicService == MusicService.Alacarte)
+{
+    builder.Services.AddHttpClient(AlacarteClient.ClientName, client =>
+    {
+        var url = builder.Configuration["Alacarte:Url"] ?? "http://alacarte:7373";
+        client.BaseAddress = new Uri(url.TrimEnd('/') + "/");
+        client.Timeout = TimeSpan.FromSeconds(20);
+        // Optional normal ALACarte session cookie, supplied through a secret file.
+        var cookieFile = builder.Configuration["Alacarte:SessionCookieFile"];
+        if (!string.IsNullOrWhiteSpace(cookieFile))
+            {
+            var cookie = File.ReadAllText(cookieFile).Trim();
+            if (cookie.Length > 0) client.DefaultRequestHeaders.Add("Cookie", "alacarte_session=" + cookie);
+        }
+    }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
+    builder.Services.AddSingleton<AlacarteClient>();
+    builder.Services.AddSingleton<IMusicMetadataService, AlacarteMetadataService>();
+    builder.Services.AddSingleton<IDownloadService, AlacarteDownloadService>();
+    builder.Services.AddSingleton<AlbumAcquisitionService>();
+    builder.Services.AddHostedService(p => p.GetRequiredService<AlbumAcquisitionService>());
+    builder.Services.AddSingleton<YouTubeResolver>();
+    builder.Services.AddSingleton<ApplePlaybackService>();
+    builder.Services.AddHttpClient(YouTubeResolver.SearchClientName, c => c.Timeout = TimeSpan.FromSeconds(45));
+    builder.Services.AddHttpClient(YouTubeResolver.StreamClientName, c => c.Timeout = Timeout.InfiniteTimeSpan);
+}
+else if (musicService == MusicService.Qobuz)
 {
     // If playlists enabled, register Deezer FIRST (secondary provider)
     if (enableExternalPlaylists)

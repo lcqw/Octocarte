@@ -83,3 +83,13 @@ __MACOSX/
 .AppleDouble
 .LSOverride
 Icon[]
+
+# Octocarte runtime and secrets
+secrets/
+.env.*
+!.env.example
+!.env.octocarte.example
+__pycache__/
+.pytest_cache/
+.venv/
+alacarte-session-cookie

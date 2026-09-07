@@ -2,9 +2,6 @@ name: Docker Build & Push
 
 on:
   workflow_dispatch:
-  push:
-    tags: ['v*']
-    branches: [master, dev]
 
 env:
   DOTNET_VERSION: "9.0.x"

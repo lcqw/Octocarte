@@ -733,6 +733,8 @@ public class SubsonicResponseBuilder
             return ("mp3", "audio/mpeg", 128);
         }
 
+        if (song.ExternalProvider == "apple") return ("m4a", "audio/mp4", 0);
+
         // Default for external providers (Deezer, Qobuz, SquidWTF) without cached file
         return ("Remote", "audio/mpeg", 0);
     }

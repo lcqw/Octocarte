@@ -86,7 +86,9 @@ public enum MusicService
     /// <summary>
     /// Tidal music service, using your own account through Tidal's official API
     /// </summary>
-    Tidal
+    Tidal,
+
+    Alacarte
 }
 
 public class SubsonicSettings

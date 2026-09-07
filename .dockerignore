@@ -1,0 +1,10 @@
+.git
+**/bin
+**/obj
+**/__pycache__
+**/.pytest_cache
+**/.venv
+.env*
+secrets
+config
+**/downloads

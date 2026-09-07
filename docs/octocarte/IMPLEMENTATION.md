@@ -36,3 +36,20 @@ in its image. .NET host lacks ASP.NET runtime; use containers for runtime tests.
 GitHub identity Vixxy0w0; CLI repo/workflow scopes verified. Octocarte verified
 private and not a fork. origin is private Octocarte; upstream is Octo-Fiesta.
 Existing Monochrome work has dirty files and is outside this checkout.
+
+## Duplicate ownership clarification
+ALACarte remains the sole persistent duplicate authority, including queued/running
+job reuse, HTTP 409 already-present handling and partial-album completion.
+Octocarte uses only a bounded in-memory queue, in-flight song keys and a 30-second
+album burst debounce. It has no Apple library index or duplicate database.
+
+## Initial implementation validation
+678 .NET tests and 22 Python tests passed. Both Docker images built.
+`tests/http_mvp.py` passed against the running application with controlled HTTP
+fixtures: search IDs and metadata, Range/206 passthrough, playback during a blocked
+album POST, burst deduplication, native metadata after indexing and later local
+playback using an old placeholder ID. These fixtures do not prove real Apple
+acquisition or Wavio behavior.
+
+The imported Docker publishing workflow is manual-only for Octocarte; normal
+private development pushes run CI without publishing a container package.

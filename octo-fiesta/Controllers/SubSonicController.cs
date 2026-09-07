@@ -178,6 +178,13 @@ public class SubsonicController : ControllerBase
             return await _proxyService.RelayStreamAsync(parameters, HttpContext.RequestAborted);
         }
 
+        if (provider == "apple")
+        {
+            var playback = HttpContext.RequestServices.GetRequiredService<octo_fiesta.Services.Alacarte.ApplePlaybackService>();
+            var direct = await playback.OpenAsync(externalId!, Request.Headers.Range.ToString(), HttpContext.RequestAborted);
+            return direct is null ? StatusCode(502, new { error = "Temporary playback unavailable" }) : direct;
+        }
+
         // Otherwise download from the provider and stream (quality upgrade logic applies)
         try
         {
