@@ -66,3 +66,5 @@ Other possible discovery additions are similar artists (fits artist-info
 responses), latest releases and album categories (artist browsing), then charts
 and editorial playlists (client support varies). These are proposals, not
 implemented features. Each needs a verified ALACarte HTTP contract first.
+
+For the candidate unattended integration credential, see [SERVICE_AUTH.md](SERVICE_AUTH.md). It is developed separately from the installed catalog extension.

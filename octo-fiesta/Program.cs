@@ -91,13 +91,7 @@ if (musicService == MusicService.Alacarte)
         var url = builder.Configuration["Alacarte:Url"] ?? "http://alacarte:7373";
         client.BaseAddress = new Uri(url.TrimEnd('/') + "/");
         client.Timeout = TimeSpan.FromSeconds(20);
-        // Optional normal ALACarte session cookie, supplied through a secret file.
-        var cookieFile = builder.Configuration["Alacarte:SessionCookieFile"];
-        if (!string.IsNullOrWhiteSpace(cookieFile))
-        {
-            var cookie = File.ReadAllText(cookieFile).Trim();
-            if (cookie.Length > 0) client.DefaultRequestHeaders.Add("Cookie", "alacarte_session=" + cookie);
-        }
+        AlacarteAuthentication.Configure(client, builder.Configuration);
     }).ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false, UseCookies = false });
     builder.Services.AddSingleton<AlacarteClient>();
     builder.Services.AddSingleton<IMusicMetadataService, AlacarteMetadataService>();
