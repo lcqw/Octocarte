@@ -20,3 +20,14 @@ setting. Both are lossless formats. Lower compressed bitrate after that conversi
 alone is not evidence of reduced audio quality. Octocarte leaves this choice in
 ALACarte and does not override it. Changing the preference does not automatically
 rewrite albums already present in the library.
+
+## Artist profiles
+
+For local artists matched to Apple Music by name and album evidence, Octocarte
+uses the Apple photo for both the artist page and artist-info responses. The
+local artist ID and downloaded albums stay intact. Ambiguous matches retain
+Navidrome's metadata.
+
+ALACarte's artist API currently supplies photos, not biographies. Matched Apple
+profiles omit Navidrome's name-based biography to avoid showing text about a
+different artist with the same name.

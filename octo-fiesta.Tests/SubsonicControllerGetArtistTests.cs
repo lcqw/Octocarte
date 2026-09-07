@@ -42,7 +42,7 @@ public class SubsonicControllerGetArtistTests
         string requestedId = "local-artist-id",
         (bool IsExternal, string? Provider, string? ExternalId) parsedId = default,
         string? navidromeSearchJson = null,
-        bool navidromeXml = false)
+        bool navidromeXml = false, bool alacarte = false)
     {
         var requestParser = new SubsonicRequestParser();
         var responseBuilder = new SubsonicResponseBuilder();
@@ -50,7 +50,7 @@ public class SubsonicControllerGetArtistTests
             responseBuilder,
             new Mock<ILogger<SubsonicModelMapper>>().Object);
 
-        var settings = Options.Create(new SubsonicSettings { Url = "http://localhost:4533" });
+        var settings = Options.Create(new SubsonicSettings { Url = "http://localhost:4533", MusicService = alacarte ? MusicService.Alacarte : MusicService.Deezer });
 
         var mockHttpHandler = new Mock<HttpMessageHandler>();
         mockHttpHandler
@@ -62,10 +62,17 @@ public class SubsonicControllerGetArtistTests
             .ReturnsAsync((HttpRequestMessage request, CancellationToken _) =>
             {
                 var isSearch = request.RequestUri!.AbsolutePath.Contains("search3");
-                var isXml = navidromeXml && !isSearch;
+                var isXml = navidromeXml && !isSearch && !request.RequestUri.Query.Contains("f=json");
                 var body = isSearch
                     ? navidromeSearchJson ?? EmptyNavidromeSearchJson
                     : isXml ? NavidromeArtistXml : NavidromeArtistJson;
+                if (request.RequestUri.AbsolutePath.Contains("getArtistInfo"))
+                {
+                    var element = request.RequestUri.AbsolutePath.EndsWith("2") ? "artistInfo2" : "artistInfo";
+                    body = isXml
+                        ? $"<subsonic-response xmlns=\"http://subsonic.org/restapi\" status=\"ok\"><{element}><biography>Unrelated band</biography><largeImageUrl>https://wrong.example/photo.jpg</largeImageUrl></{element}></subsonic-response>"
+                        : JsonSerializer.Serialize(new Dictionary<string, object> { ["subsonic-response"] = new Dictionary<string, object> { ["status"] = "ok", [element] = new { biography = "Unrelated band", largeImageUrl = "https://wrong.example/photo.jpg" } } });
+                }
                 return new HttpResponseMessage(HttpStatusCode.OK)
                 {
                     Content = new StringContent(body, System.Text.Encoding.UTF8, isXml ? "application/xml" : "application/json")
@@ -245,5 +252,100 @@ public class SubsonicControllerGetArtistTests
         // Navidrome attributes of the owned album must survive the merge
         Assert.Equal("3", albums[0].Attribute("playCount")?.Value);
         Assert.Equal("12", albums[0].Attribute("songCount")?.Value);
+    }
+
+    private static Mock<IMusicMetadataService> AppleArtists(bool albumMatch = true, bool ambiguous = false)
+    {
+        var metadata = new Mock<IMusicMetadataService>();
+        metadata.Setup(x => x.SearchArtistsAsync("Genesis", It.IsAny<int>())).ReturnsAsync(new List<Artist>
+        {
+            new() { Id = "ext-apple-artist-1", ExternalProvider = "apple", ExternalId = "1", Name = "Genesis" },
+            new() { Id = "ext-apple-artist-2", ExternalProvider = "apple", ExternalId = "2", Name = "Genesis" }
+        });
+        metadata.Setup(x => x.GetArtistAlbumsAsync("apple", "1")).ReturnsAsync(new List<Album>
+        { new() { Title = ambiguous ? "We Can't Dance" : "Other band's album", Id = "ext-apple-album-11" } });
+        metadata.Setup(x => x.GetArtistAlbumsAsync("apple", "2")).ReturnsAsync(new List<Album>
+        {
+            new() { Title = albumMatch ? "We Can't Dance" : "Different album", Id = "ext-apple-album-21" },
+            new() { Title = "Invisible Touch", Id = "ext-apple-album-22" }
+        });
+        metadata.Setup(x => x.GetArtistAsync("apple", "2")).ReturnsAsync(new Artist
+        { Id = "ext-apple-artist-2", Name = "Genesis", ImageUrl = "https://apple.example/correct.jpg" });
+        return metadata;
+    }
+
+    private static XElement ArtistResult(IActionResult result, bool xml, string element)
+    {
+        if (xml)
+        {
+            var body = result is ContentResult content ? content.Content! : System.Text.Encoding.UTF8.GetString(((FileContentResult)result).FileContents);
+            return XDocument.Parse(body).Root!.Elements().Single(e => e.Name.LocalName == element);
+        }
+        var json = result is JsonResult data ? JsonSerializer.Serialize(data.Value) : System.Text.Encoding.UTF8.GetString(((FileContentResult)result).FileContents);
+        using var doc = JsonDocument.Parse(json);
+        var value = doc.RootElement.GetProperty("subsonic-response").GetProperty(element);
+        return new XElement(element, value.EnumerateObject().Where(p => p.Value.ValueKind == JsonValueKind.String).Select(p => new XAttribute(p.Name, p.Value.GetString()!)));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LocalAppleArtist_UsesMatchedPhotoAndRetainsLocalIdentity(bool xml)
+    {
+        var controller = CreateController(AppleArtists(), navidromeXml: xml, alacarte: true);
+        for (var attempt = 0; attempt < 2; attempt++)
+        {
+            var result = await controller.GetArtist();
+            var artist = ArtistResult(result, xml, "artist");
+            Assert.Equal("local-artist-id", artist.Attribute("id")?.Value);
+            Assert.Equal("ext-apple-artist-2", artist.Attribute("coverArt")?.Value);
+            Assert.Equal("https://apple.example/correct.jpg", artist.Attribute("artistImageUrl")?.Value);
+            if (!xml) Assert.Equal("local-album-1", GetMergedAlbums(result)[0].Id);
+        }
+    }
+
+    [Theory]
+    [InlineData(false, "getArtistInfo")]
+    [InlineData(false, "getArtistInfo2")]
+    [InlineData(true, "getArtistInfo")]
+    [InlineData(true, "getArtistInfo2")]
+    public async Task LocalAppleArtistInfo_MatchesPhotoAndDoesNotInheritHomonymBiography(bool xml, string endpoint)
+    {
+        var controller = CreateController(AppleArtists(), navidromeXml: xml, alacarte: true);
+        controller.Request.Path = "/rest/" + endpoint;
+        var info = ArtistResult(await controller.GetArtistInfo(), xml, endpoint[3..4].ToLowerInvariant() + endpoint[4..]);
+        string? Field(string name) => xml ? info.Elements().SingleOrDefault(e => e.Name.LocalName == name)?.Value : info.Attribute(name)?.Value;
+        Assert.Equal("https://apple.example/correct.jpg", Field("largeImageUrl"));
+        Assert.Equal("https://apple.example/correct.jpg", Field("smallImageUrl"));
+        Assert.Null(Field("biography"));
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LocalAppleArtist_WithoutUniqueAlbumEvidence_PreservesNavidrome(bool ambiguous)
+    {
+        var controller = CreateController(AppleArtists(albumMatch: ambiguous, ambiguous: ambiguous), alacarte: true);
+        var result = await controller.GetArtist();
+        var artist = ArtistResult(result, false, "artist");
+        Assert.Equal("local-album-1", Assert.Single(GetMergedAlbums(result)).Id);
+        Assert.Null(artist.Attribute("artistImageUrl"));
+        controller.Request.Path = "/rest/getArtistInfo2";
+        var info = ArtistResult(await controller.GetArtistInfo(), false, "artistInfo2");
+        Assert.Equal("Unrelated band", info.Attribute("biography")?.Value);
+    }
+
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task LocalAppleArtist_WhenCatalogUnavailable_RetainsLocalResponse(bool infoRequest)
+    {
+        var metadata = AppleArtists();
+        metadata.Setup(x => x.GetArtistAlbumsAsync("apple", "1")).ThrowsAsync(new HttpRequestException("unavailable"));
+        var controller = CreateController(metadata, alacarte: true);
+        controller.Request.Path = "/rest/getArtistInfo2";
+        var result = infoRequest ? await controller.GetArtistInfo() : await controller.GetArtist();
+        var element = ArtistResult(result, false, infoRequest ? "artistInfo2" : "artist");
+        Assert.Equal(infoRequest ? "Unrelated band" : "local-artist-id", element.Attribute(infoRequest ? "biography" : "id")?.Value);
     }
 }
