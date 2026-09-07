@@ -1,7 +1,5 @@
 # Octocarte
 
----
-
 Apple Music discovery and album downloads for your Navidrome library, built on
 [Octo-Fiesta](https://github.com/V1ck3s/octo-fiesta),
 [ALACarte](https://github.com/sosjalapeno/alacarte) and
@@ -9,9 +7,7 @@ Apple Music discovery and album downloads for your Navidrome library, built on
 
 **Note: An Apple Music subscription is required.**
 
-**Features**
-
----
+## Features
 
 - **Apple Music search:** Search Apple Music's artists, albums and songs alongside your local library from your usual Subsonic client, using ALACarte's catalog search and Octo-Fiesta's client support.
 - **Artist pages:** Browse artist photos, discographies and Apple-ranked top songs. Octocarte's ALACarte integration includes these automatically, with no extra extensions to install.
@@ -20,18 +16,14 @@ Apple Music discovery and album downloads for your Navidrome library, built on
 - **Local playback takes over:** After ALACarte triggers a Navidrome scan, Octocarte matches the downloaded tracks to your library. Later searches and playback use the local lossless files.
 - **Library-aware downloads:** ALACarte reuses queued album jobs, skips albums already in your library and downloads only missing tracks from partially downloaded albums.
 
-**Disclaimer**
-
----
+## Disclaimer
 
 **Octocarte is intended for personal archival use.** Downloading through third-party
 tools may violate [Apple's Terms of Service](https://www.apple.com/legal/internet-services/itunes/),
 even with a subscription. You are responsible for following applicable service
 terms and the laws in your jurisdiction.
 
-**Quick start**
-
----
+## Quick start
 
 Requires an existing Navidrome server and a Linux x86-64 host with Docker and
 Docker Compose v2 or newer.
@@ -71,9 +63,18 @@ credentials.
 Point your Subsonic client to **`http://<octocarte-host-ip>:5274`** and use your
 existing Navidrome login. If using Caddy, point it at this address and port too.
 
-[Setup help](docs/SETUP.md) · [Updating and backups](docs/OPERATIONS.md) · [Client notes](docs/CLIENTS.md)
+[Setup help](docs/SETUP.md) · [Updating and backups](docs/OPERATIONS.md)
 
----
+## Supported clients
+
+| Client | Platforms |
+| --- | --- |
+| [Wavio](https://github.com/Joel-Mercier/wavio) | Android; iOS (build from source) |
+| [Aonsoku](https://github.com/victoralvesf/aonsoku) | Linux, Windows, macOS |
+
+*Currently tested with Octocarte: Wavio on Android and Aonsoku on Linux.*
+
+## License
 
 Octocarte is licensed under [GPLv3](LICENSE). ALACarte runs as a separate
 [AGPLv3](integrations/alacarte/LICENSE) service. See [attribution](NOTICE.md)
