@@ -38,6 +38,7 @@ jobs:
           python3 tests/http_mvp.py
           OCTOCARTE_TEST_SERVICE_AUTH=1 python3 tests/http_mvp.py
           python3 tests/test_secret_file.py
+          python3 tests/test_compose_package.py
 
   shim-tests:
     runs-on: ubuntu-latest
@@ -62,10 +63,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - name: Apply optional catalog extension
+      - name: Apply included ALACarte integration
         run: |
           git -C alacarte-source apply ../integrations/alacarte/top-songs.patch
           git -C alacarte-source apply ../integrations/alacarte/service-auth.patch
+          git -C alacarte-source apply ../integrations/alacarte/wrapper-image.patch
       - name: Check ALACarte extension
         working-directory: alacarte-source/backend
         run: |

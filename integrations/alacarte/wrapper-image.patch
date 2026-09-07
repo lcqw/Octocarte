@@ -1,0 +1,11 @@
+--- a/backend/lib/wrapperLogin.mjs
++++ b/backend/lib/wrapperLogin.mjs
+@@ -18,7 +18,7 @@
+ 
+ const docker = new Docker({ socketPath: '/var/run/docker.sock' })
+ 
+-const WRAPPER_IMAGE = 'alacarte-wrapper:local'
++const WRAPPER_IMAGE = process.env.AMDL_WRAPPER_IMAGE || 'alacarte-wrapper:local'
+ const WRAPPER_CONTAINER = 'alacarte-wrapper'
+ const TEMP_CONTAINER = 'alacarte-wrapper-login'
+ const DEFAULT_NETWORK = 'alacarte-net'
