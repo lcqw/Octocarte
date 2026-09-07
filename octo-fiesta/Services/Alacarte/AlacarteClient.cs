@@ -18,7 +18,14 @@ public sealed class AlacarteClient(IHttpClientFactory factory)
     public async Task SubmitAlbumAsync(string albumId, CancellationToken ct)
     {
         // Omitting storefront and quality is intentional: ALACarte owns preferences.
-        using var response = await factory.CreateClient(ClientName).PostAsJsonAsync("api/download", new { albumId }, ct);
+        var client = factory.CreateClient(ClientName);
+        using var request = new HttpRequestMessage(HttpMethod.Post, "api/download")
+        {
+            Content = JsonContent.Create(new { albumId })
+        };
+        // ALACarte originGuard requires matching Origin/Host on authenticated writes.
+        request.Headers.Add("Origin", client.BaseAddress!.GetLeftPart(UriPartial.Authority));
+        using var response = await client.SendAsync(request, ct);
         if (response.StatusCode == HttpStatusCode.Conflict) return; // already owned
         response.EnsureSuccessStatusCode();
     }

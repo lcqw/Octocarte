@@ -61,6 +61,7 @@ class Fixture(BaseHTTPRequestHandler):
 
     def do_POST(self):
         assert self.path == "/api/download"
+        assert self.headers.get("Origin") == "http://" + self.headers["Host"]
         if self.headers.get("Transfer-Encoding", "").lower() == "chunked":
             chunks = []
             while True:

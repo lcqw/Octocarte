@@ -43,6 +43,7 @@ public sealed class AlbumAcquisitionService(AlacarteClient api, IMusicMetadataSe
                 recentAlbums[albumId] = now.AddSeconds(30);
             }
             catch (OperationCanceledException) when (stoppingToken.IsCancellationRequested) { break; }
+            catch (HttpRequestException ex) { logger.LogWarning("ALACarte album submission failed (HTTP {Status}); a later play may retry", (int?)ex.StatusCode); }
             catch (Exception) { logger.LogWarning("ALACarte album submission failed; a later play may retry"); }
             finally { pending.TryRemove(id, out _); }
         }

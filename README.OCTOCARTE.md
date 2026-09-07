@@ -5,9 +5,10 @@ comes from the separate ALACarte service. Unowned tracks play temporary YouTube
 AAC/M4A while ALACarte acquires their whole parent album using its saved settings.
 Once Navidrome indexes the files, local results and streams take precedence.
 
-**Status:** implementation and fixture-based HTTP MVP tests pass. A real YouTube AAC/range probe also passed. Wavio and live
-ALACarte acquisition validation must be completed before declaring
-this production-ready. See [validation](docs/octocarte/IMPLEMENTATION.md).
+**Status:** automated tests, live YouTube streaming and live whole-album ALAC
+acquisition pass. Real automatic scanning/local handoff and Wavio acceptance
+remain pending ALACarte's scan integration and shared-library configuration.
+See [validation](docs/octocarte/VALIDATION.md).
 
 ## Start
 

@@ -122,6 +122,7 @@ public class OctocarteContractTests
         var posts = 0;
         var factory = Factory(async (req, ct) => {
             if (req.RequestUri!.AbsolutePath == "/api/download") {
+                Assert.Equal("http://fixture", Assert.Single(req.Headers.GetValues("Origin")));
                 Interlocked.Increment(ref posts);
                 Assert.Equal("{\"albumId\":\"7\"}", await req.Content!.ReadAsStringAsync(ct));
                 postStarted.TrySetResult();
