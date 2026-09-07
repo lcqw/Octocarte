@@ -7,8 +7,9 @@ Once Navidrome indexes the files, local results and streams take precedence.
 
 **Status:** the full backend workflow passed with real services, including native
 ALAC acquisition, an ALACarte-initiated local Navidrome scan, local replacement
-and subsequent native playback/seeking. Wavio local playback/seeking is confirmed;
-external YouTube phone acceptance is still pending.
+and subsequent native playback/seeking. Wavio phone acceptance passed, including
+artist photos/top songs and unowned playback. Entergalactic completed as a full
+15-track native ALAC album. Temporary local validation services were cleaned up.
 NAS deployment requires shared music storage. See [validation](docs/octocarte/VALIDATION.md).
 
 ## Start

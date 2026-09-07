@@ -9,7 +9,8 @@
   metadata, nonblocking album submission, matching POST Origin, in-memory burst
   deduplication, HTTP ranges, local-result replacement and old-ID local playback.
 - Local search still succeeds when ALACarte returns HTTP 503.
-- GitHub CI passed at 6e5626a, including the authenticated POST Origin fix.
+- GitHub CI passed at 5711203, including the complete streaming fixture and
+  the optional ALACarte extension tests.
 
 ## Live evidence (2026-09-07)
 
@@ -61,14 +62,31 @@ validated the full backend chain:
 - A nonzero seek returned HTTP 206 and
   `Content-Range: bytes 1048576-1114111/42477286` with exactly 65536 bytes.
 
-## Remaining acceptance
+## Wavio phone acceptance and cleanup
 
-The backend end-to-end workflow is verified against real services. The user
-confirmed Wavio search, album/artist browsing, and playback/seeking of already
-local Billie Eilish tracks. This does **not** confirm Wavio YouTube playback.
-The external phone playback test remains pending. After that,
-restore ALACarte's NAS URL and remove the temporary containers, Navidrome volume
-and generated test credentials.
+The user confirmed the updated artist photo, album list, top songs and unowned
+playback/seek test worked, using **Kid Cudi — Entergalactic Theme** from
+**Entergalactic**. Earlier phone tests had separately confirmed local playback
+and seeking. This completes the requested MVP acceptance on Wavio.
+
+The actual album handoff was then checked before cleanup:
+
+- ALACarte job `ac1fe4e1-c182-4351-8ecf-9eb3eed507d0`, album `1647008692`,
+  completed with quality `alac`.
+- All 15 expected album tracks were present and indexed by local Navidrome.
+- All 15 M4A files were independently inspected: codec ALAC, 24-bit, 44.1 kHz.
+- Search returned real track `ZRyWYL5D4oMvJp2zSx445C` for Entergalactic Theme,
+  with native metadata and local album `4TQmpDH2I9bLuTHN3pH0ou`.
+- Both original placeholder `ext-apple-song-1647008703` and the real local ID
+  subsequently returned native seeks: HTTP 206,
+  `Content-Range: bytes 65536-131071/17747073`, exactly 65536 bytes.
+
+ALACarte's scan URL was restored to `http://192.168.1.169:4533` and verified.
+The three `octocarte-validation-*` containers, isolated Navidrome data volume,
+generated local login and partial media probes were removed. Port 15880 is no
+longer the test server. Existing downloaded music, ALACarte credentials, the
+approved top-songs extension, and the normal loopback Octocarte/shim services
+were retained. Existing Monochrome and ALACarte source checkouts were untouched.
 
 Production NAS deployment still needs ALACarte's music output on storage visible
 to the NAS Navidrome. A successful scan cannot transfer files between hosts.
@@ -86,8 +104,8 @@ retry and container routing.
 On the updated temporary proxy, Kanye West returned 43 albums with an image URL
 in 0.096 seconds; `getArtistInfo2` returned its image in 0.007 seconds and
 `getCoverArt` returned HTTP 200 JPEG bytes in 0.111 seconds. ALACarte's own cache
-may already have been warm. Wavio's first-visit refresh behavior still needs a
-phone retest; these timings do not prove the UI issue is fixed.
+may already have been warm. The user subsequently confirmed the updated artist
+page worked during the phone acceptance test.
 
 Real Apple top songs are available, but stock ALACarte does not expose them.
 The user approved the separate [optional patch](../../integrations/alacarte/README.md),
@@ -102,5 +120,5 @@ extension advertising. Live Kanye West requests returned five ranked songs
 in 0.613 seconds by name and 0.129 seconds by ID. Billie Eilish returned 50
 ranked songs in 0.346 seconds; three already owned tracks were replaced with
 real Navidrome IDs and native 24-bit / 44.1 or 48 kHz metadata. These checks
-were read-only and did not submit album jobs. Phone confirmation of top songs,
-artist photos, first-visit discography and external playback remains pending.
+were read-only and did not submit album jobs. The subsequent phone acceptance
+and real Entergalactic acquisition are recorded above.
