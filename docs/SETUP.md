@@ -76,3 +76,27 @@ and wrapper publish no host ports.
 
 For connection errors, check `docker compose ps -a`, the Navidrome URL, and the
 host's firewall.
+
+
+## Download scope
+
+Full-album downloads are the default. To download only the requested song, set
+this in Octocarte's `.env`:
+
+```dotenv
+DOWNLOAD_WHOLE_ALBUM=false
+```
+
+Apply the setting with `docker compose up -d`. To restore album downloads, set
+it to `true` and run the same command. This preference applies to all clients.
+Existing installations that omit it continue downloading whole albums.
+
+Playback still starts through YouTube while ALACarte handles the download,
+quality, tagging, duplicate checks and Navidrome scan. Changing this preference
+does not cancel jobs ALACarte has already accepted or remove existing music.
+A client's prefetch requests can also trigger acquisition.
+
+When configuring Octocarte without the supplied Compose file, use the container
+environment variable `Alacarte__DownloadWholeAlbum=false` instead. Custom
+installations need an ALACarte integration image from the same Octocarte release,
+which permits the existing single-song download endpoint.

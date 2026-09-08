@@ -17,7 +17,7 @@ Octocarte communicates through HTTP and leaves preferences under ALACarte's cont
   storefront, language and rating preferences. Results retain Apple's order and
   parent-album identifiers. Octocarte replaces matches with native Navidrome tracks.
 - **Unattended access:** `service-auth.patch` adds a scoped, deployment-owned token
-  for catalog reads and album submission. The package provisions it automatically.
+  for catalog reads and album or song submission. The package provisions it automatically.
   See [authentication details](SERVICE_AUTH.md) for scope, rotation and revocation.
 - **Wrapper image selection:** `wrapper-image.patch` lets ALACarte's existing
   sign-in flow use the exact wrapper image included in the package. It changes
@@ -57,3 +57,8 @@ dated in Git history. No warranty is provided; see [LICENSE](LICENSE).
 
 Public distribution and the modified service's source offer still require the
 work recorded in the [distribution review](../../docs/development/LICENSING.md).
+
+
+Single-song access added 2026-09-08: the scoped token also permits ALACarte's
+existing song-download endpoint, accepting only a numeric song ID. ALACarte's
+downloader and library implementation remain unchanged.

@@ -15,13 +15,19 @@ public sealed class AlacarteClient(IHttpClientFactory factory)
         return doc.RootElement.Clone();
     }
 
-    public async Task SubmitAlbumAsync(string albumId, CancellationToken ct)
+    public Task SubmitAlbumAsync(string albumId, CancellationToken ct) =>
+        SubmitAsync("api/download", new { albumId }, ct);
+
+    public Task SubmitSongAsync(string songId, CancellationToken ct) =>
+        SubmitAsync("api/download/song", new { songId }, ct);
+
+    private async Task SubmitAsync(string path, object body, CancellationToken ct)
     {
         // Omitting storefront and quality is intentional: ALACarte owns preferences.
         var client = factory.CreateClient(ClientName);
-        using var request = new HttpRequestMessage(HttpMethod.Post, "api/download")
+        using var request = new HttpRequestMessage(HttpMethod.Post, path)
         {
-            Content = JsonContent.Create(new { albumId })
+            Content = JsonContent.Create(body)
         };
         // ALACarte originGuard requires matching Origin/Host on authenticated writes.
         request.Headers.Add("Origin", client.BaseAddress!.GetLeftPart(UriPartial.Authority));

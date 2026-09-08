@@ -19,9 +19,10 @@ A random 256-bit service token authorizes only:
 - `GET /api/artist/:numericId`
 - `GET /api/artist/:numericId/top-songs`
 - `POST /api/download` with exactly `{"albumId":"numericId"}`
+- `POST /api/download/song` with exactly `{"songId":"numericId"}`
 
 The token does not grant access to settings, queue/library administration,
-per-song or playlist downloads, cancellation, or preference overrides. The
+playlist downloads, cancellation, or preference overrides. The
 existing Origin check still applies to writes. ALACarte's browser sessions and
 Apple credentials keep their existing behavior. A service token is a separate
 credential; browser logout or password changes do not revoke it.
