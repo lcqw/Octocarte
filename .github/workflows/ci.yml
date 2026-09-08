@@ -1,6 +1,7 @@
 name: CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [master, dev]
   pull_request:
@@ -12,6 +13,7 @@ env:
 
 jobs:
   build-and-test:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
 
     steps:
@@ -41,6 +43,7 @@ jobs:
           python3 tests/test_simple_compose.py
 
   shim-tests:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -51,6 +54,7 @@ jobs:
       - run: python -m pytest yt-dlp-shim/tests -q
 
   alacarte-extension-tests:
+    if: github.event_name != 'workflow_dispatch'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -75,3 +79,42 @@ jobs:
           npm ci --ignore-scripts --no-audit --no-fund
           npm run lint:syntax
           node --test test/artistTopSongs*.test.mjs test/integrationAuth*.test.mjs test/octocarteSource.test.mjs
+
+  verify-release-images:
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Verify released images in the current account namespace
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh release download "v$(cat VERSION)" --repo "$GITHUB_REPOSITORY" --pattern images.lock.json --dir "$RUNNER_TEMP/release"
+          python3 - <<'PYTHON'
+          import json, os, subprocess
+          from pathlib import Path
+
+          release = json.loads((Path(os.environ['RUNNER_TEMP']) / 'release/images.lock.json').read_text())
+          version = Path('VERSION').read_text().strip()
+          assert release['version'] == version
+          images = release['images']
+          assert len(images) == 5
+          owner = os.environ['GITHUB_REPOSITORY_OWNER'].lower()
+          for entry in images.values():
+              name = entry['tag'].rsplit('/', 1)[1]
+              tag = f'ghcr.io/{owner}/{name}'
+              subprocess.run(['docker', 'pull', tag], check=True)
+              actual = json.loads(subprocess.check_output(['docker', 'image', 'inspect', tag], text=True))[0]
+              assert actual['Id'] == entry['id'], f'Image content changed: {tag}'
+              expected = entry['registryDigest'].split('@', 1)[1]
+              assert any(d.split('@', 1)[1] == expected for d in actual['RepoDigests']), f'Manifest changed: {tag}'
+              print(f'Verified {tag}: unchanged release image', flush=True)
+          PYTHON

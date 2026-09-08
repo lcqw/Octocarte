@@ -30,7 +30,7 @@ Requires an existing Navidrome server and a Linux x86-64 host with Docker and
 Docker Compose v2 or newer.
 
 ```sh
-git clone https://github.com/Vixxy0w0/Octocarte.git
+git clone https://github.com/lcqw/Octocarte.git
 cd Octocarte
 cp .env.example .env
 nano .env

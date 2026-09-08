@@ -125,7 +125,7 @@ def main():
                 tag = prefix + name + ':' + args.version
                 run('docker', 'build', '--platform', 'linux/amd64', '-t', tag,
                     '--build-arg', 'VERSION=' + args.version,
-                    '--label', 'org.opencontainers.image.source=https://github.com/' + os.environ.get('GITHUB_REPOSITORY', 'Vixxy0w0/Octocarte'),
+                    '--label', 'org.opencontainers.image.source=https://github.com/' + os.environ.get('GITHUB_REPOSITORY', 'lcqw/Octocarte'),
                     '--label', 'org.opencontainers.image.revision=' + revision,
                     '--label', 'org.opencontainers.image.version=' + args.version,
                     '-f', str(dockerfile), str(context))
