@@ -7,7 +7,7 @@ x-logging: &logging
 
 services:
   initialize:
-    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/lcqw/octocarte}-init:${OCTOCARTE_VERSION:-0.1.0}
+    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/lcqw/octocarte}-init:${OCTOCARTE_VERSION:-0.1.1}
     restart: "no"
     network_mode: none
     logging: *logging
@@ -15,7 +15,7 @@ services:
       - integration-auth:/auth
 
   octocarte:
-    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/lcqw/octocarte}:${OCTOCARTE_VERSION:-0.1.0}
+    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/lcqw/octocarte}:${OCTOCARTE_VERSION:-0.1.1}
     restart: unless-stopped
     logging: *logging
     ports:
@@ -39,7 +39,7 @@ services:
       yt-dlp-shim: {condition: service_healthy}
 
   yt-dlp-shim:
-    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/lcqw/octocarte}-shim:${OCTOCARTE_VERSION:-0.1.0}
+    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/lcqw/octocarte}-shim:${OCTOCARTE_VERSION:-0.1.1}
     restart: unless-stopped
     logging: *logging
     environment:
@@ -55,7 +55,7 @@ services:
       start_period: 20s
 
   alacarte:
-    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/lcqw/octocarte}-alacarte:${OCTOCARTE_VERSION:-0.1.0}
+    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/lcqw/octocarte}-alacarte:${OCTOCARTE_VERSION:-0.1.1}
     platform: linux/amd64
     restart: unless-stopped
     logging: *logging
@@ -64,7 +64,7 @@ services:
     environment:
       PORT: "7373"
       AMDL_WRAPPER_HOST: alacarte-wrapper
-      AMDL_WRAPPER_IMAGE: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/lcqw/octocarte}-wrapper:${OCTOCARTE_VERSION:-0.1.0}
+      AMDL_WRAPPER_IMAGE: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/lcqw/octocarte}-wrapper:${OCTOCARTE_VERSION:-0.1.1}
       AMDL_WRAPPER_DECRYPT_PORT: "10020"
       AMDL_WRAPPER_M3U8_PORT: "20020"
       AMDL_WRAPPER_ACCOUNT_PORT: "30020"
@@ -97,7 +97,7 @@ services:
       start_period: 30s
 
   wrapper:
-    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/lcqw/octocarte}-wrapper:${OCTOCARTE_VERSION:-0.1.0}
+    image: ${OCTOCARTE_IMAGE_BASE:-ghcr.io/lcqw/octocarte}-wrapper:${OCTOCARTE_VERSION:-0.1.1}
     # Required by ALACarte's existing sign-in flow: one installation per host.
     container_name: alacarte-wrapper
     platform: linux/amd64

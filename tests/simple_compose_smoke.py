@@ -18,12 +18,15 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+from check_downloader_launch import check_downloader_launch
+
 ROOT = Path(__file__).resolve().parents[1]
 parser = argparse.ArgumentParser(description=__doc__)
 parser.add_argument('--source-archive', type=Path, help='verify source offer against this build artifact')
 parser.add_argument('--image-base', default='octocarte')
 parser.add_argument('--version', default=(ROOT / 'VERSION').read_text().strip())
 args = parser.parse_args()
+check_downloader_launch(args.image_base + '-alacarte:' + args.version)
 project = 'octocarte-install-test-' + secrets.token_hex(4)
 shim_image = args.image_base + '-shim:' + args.version
 

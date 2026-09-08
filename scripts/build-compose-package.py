@@ -14,6 +14,12 @@ import tempfile
 ROOT = Path(__file__).resolve().parents[1]
 ALACARTE_REVISION = 'ef9b677c21b024a0acbf4f88d47c4ebff24802fa'
 ALACARTE_URL = 'https://github.com/sosjalapeno/alacarte.git'
+# Validated with ALACarte's Ubuntu runtime. Do not silently consume a new binary
+# from upstream latest: 0.1.0 picked up a missing-musl-loader regression.
+PINNED_BASE_IMAGES = {
+    'ghcr.io/zhaarey/apple-music-downloader:latest':
+        'ghcr.io/zhaarey/apple-music-downloader@sha256:79442240978dbc9f8e073f15116610855bb4decd77ca99ea9095a7f098377091',
+}
 PATCHES = ('top-songs.patch', 'service-auth.patch', 'wrapper-image.patch', 'source-offer.patch')
 
 
@@ -102,8 +108,9 @@ def main():
                 text = dockerfile.read_text()
                 for base in re.findall(r'^FROM (\S+)', text, flags=re.MULTILINE):
                     if base not in manifest['baseImages']:
-                        run('docker', 'pull', '--platform', 'linux/amd64', base)
-                        digests = json.loads(output('docker', 'image', 'inspect', base, '--format', '{{json .RepoDigests}}'))
+                        resolved = PINNED_BASE_IMAGES.get(base, base)
+                        run('docker', 'pull', '--platform', 'linux/amd64', resolved)
+                        digests = json.loads(output('docker', 'image', 'inspect', resolved, '--format', '{{json .RepoDigests}}'))
                         if not digests:
                             raise RuntimeError('Base image did not resolve to a registry digest')
                         manifest['baseImages'][base] = digests[0]
@@ -129,6 +136,8 @@ def main():
                     '--label', 'org.opencontainers.image.revision=' + revision,
                     '--label', 'org.opencontainers.image.version=' + args.version,
                     '-f', str(dockerfile), str(context))
+                if key == 'ALACARTE_IMAGE':
+                    run('python3', str(app / 'tests/check_downloader_launch.py'), tag)
                 manifest['images'][key] = {'tag': tag, 'id': output('docker', 'image', 'inspect', tag, '--format', '{{.Id}}')}
             for name in ('compose.yml', '.env.example'):
                 # GitHub normalizes dot-prefixed asset names on upload.

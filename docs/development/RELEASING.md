@@ -34,3 +34,17 @@ image IDs and registry digests with the published release manifest. It does not
 build, publish or change package visibility. It is useful after an account rename
 or changes to package access. Normal pushes and pull requests run the application
 checks instead.
+
+## Downloader runtime compatibility
+
+The build helper pins ALACarte's downloader base image to the digest used by the
+validated 0.0.6 release. An upstream `latest` update changed the binary's runtime
+loader and broke downloads in 0.1.0, despite the executable being present.
+Updating this dependency requires an explicit change to `PINNED_BASE_IMAGES`.
+
+Every ALACarte image build and installation smoke test runs the real ALACarte
+launch helper for album and song arguments from a temporary job directory.
+This check uses no credentials, disables networking and expects the pinned
+binary to reach its offline catalog lookup. It also runs against images pulled
+back from the registry. It catches missing executables and incompatible loaders;
+it does not replace live Apple download validation.
