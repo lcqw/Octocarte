@@ -27,9 +27,28 @@ UGREEN DXP4800 Pro (UGOS Pro), with fresh Docker volumes. In Wavio they reported
 - Accounts, preferences and playback surviving a Compose restart.
 
 These are user-reported timings and observations, not instrumented benchmarks.
-That installation used the earlier bundled Navidrome layout; it does not establish
-that the new standalone migration has been run on the user's NAS. Their running
-installation was not changed by repository cleanup. Long-term use remains ongoing.
+That installation used the earlier bundled Navidrome layout. Subsequent
+standalone testing is recorded below; long-term use remains ongoing.
+
+## Standalone 0.1.1 acceptance — 2026-09-08
+
+The same tester subsequently installed Octocarte with an independently managed
+Navidrome server and reported successful playback. After updating to `0.1.1`,
+they confirmed:
+
+- Multiple single-song downloads completed with `DOWNLOAD_WHOLE_ALBUM=false`.
+- Playing downloaded songs used local files without another acquisition request.
+- Switching to `DOWNLOAD_WHOLE_ALBUM=true` with `docker compose up -d` retained
+  local playback without requesting the remainder of an album for an owned song.
+- Playing an unowned song from the same album queued the album, and ALACarte
+  correctly downloaded only the missing tracks.
+
+These are user-reported live NAS results. Automated `0.1.1` verification passed
+705 .NET tests, the HTTP playback/acquisition contracts in both download modes,
+shim and ALACarte integration tests, and fresh container installation checks.
+The real downloader started successfully in both modes before publication and
+again after pulling the release images. Those automated downloader checks use
+no Apple credentials and do not substitute for the live results above.
 
 ## Limitations
 

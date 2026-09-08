@@ -24,5 +24,16 @@ Bundled dependencies keep their own licenses. When adding or updating them,
 check the applicable notice and source-distribution requirements alongside the
 component's build inputs. The project license does not replace dependency licenses.
 
-For upstream revisions and modification details, see [NOTICE.md](../../NOTICE.md).
+## Source provenance
+
+- Original Octo-Fiesta base: `c4d0f5734d1868b8f3f4c031566b705480c32efd`.
+- Imported Octo revision: `f9cf6f4c5eef795909335dbe52fe8e43fd739666`.
+- The pinned ALACarte revision and patch history are recorded in the
+  [integration documentation](../../integrations/alacarte/README.md).
+
+Upstream history remains in Git. The retained `v0.1` through `v0.11` tags identify
+Octo-Fiesta history, not Octocarte releases. The additional upstream Deezer
+snapshot is preserved by `archive/upstream-deezer-private-search-2026-09-08`.
+
+For modification notices, see [NOTICE.md](../../NOTICE.md).
 For release packaging, see [Building a release](RELEASING.md).

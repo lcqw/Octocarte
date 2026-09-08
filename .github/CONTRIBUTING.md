@@ -8,14 +8,16 @@ See the [architecture](../docs/development/ARCHITECTURE.md) and
 
 ## Changes
 
-- Branch from `dev` for one concrete change. Use descriptive names such as
+- Branch from `main` for one concrete change. Use descriptive names such as
   `feature/alacarte-service-auth` or `fix/stream-range-handling`.
 - Commit coherent changes with messages that describe the resulting behavior.
-- Open a pull request against `dev`. Explain the problem, implementation,
+- Open a pull request against `main`. Explain the problem, implementation,
   relevant tests and deployment impact. Use a draft while required work remains.
 - Run the required CI checks and review the complete diff before merging.
   Preserve meaningful milestone commits with a merge commit. Do not claim an
   independent review when none occurred. Auto-merge is not part of this workflow.
+- Delete completed task branches after merging. `main` is the default branch;
+  version tags identify releases, so no permanent release branch is needed.
 - Authentication, streaming and storage changes need focused regression tests
   and an isolated integration check. Documentation changes need link and content
   review. Record manual results separately from automated test coverage.

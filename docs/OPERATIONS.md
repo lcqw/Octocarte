@@ -28,6 +28,25 @@ The earlier release that bundled Navidrome needs the [migration procedure](MIGRA
 before updating its Compose file. A routine update must not orphan or recreate
 that Navidrome server unexpectedly.
 
+## Following the main branch
+
+Existing clones of the former `dev` branch need a one-time switch before their
+next update. From your Octocarte checkout, run:
+
+```sh
+git fetch origin
+git switch dev
+git branch -m main
+git branch --set-upstream-to=origin/main main
+git remote set-head origin -a
+git pull --ff-only
+```
+
+These commands assume the original installation checkout, with a local `dev`
+branch and no local `main` branch. Preserve any tracked local edits before pulling;
+do not reset or overwrite them. Fresh clones already use `main` and can skip this
+step. Switching branches retains your `.env` and does not restart containers.
+
 ## Repository address change
 
 The repository is now `lcqw/Octocarte`, and images are under
