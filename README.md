@@ -24,46 +24,71 @@ tools may violate [Apple's Terms of Service](https://www.apple.com/legal/interne
 even with a subscription. You are responsible for following applicable service
 terms and the laws in your jurisdiction.
 
+## Requirements
+
+- A paid Apple Music subscription
+- An existing Navidrome server
+- A Linux x86-64 host with Docker and Docker Compose v2 or newer
+- Your Apple Music `media-user-token` (optional; [required for lyrics](docs/SETUP.md#lyrics))
+
 ## Quick start
 
-Requires an existing Navidrome server and a Linux x86-64 host with Docker and
-Docker Compose v2 or newer.
+1. **Download Octocarte**
 
-```sh
-git clone https://github.com/lcqw/Octocarte.git
-cd Octocarte
-cp .env.example .env
-nano .env
-```
+   ```sh
+   git clone https://github.com/lcqw/Octocarte.git
+   cd Octocarte
+   cp .env.example .env
+   nano .env
+   ```
 
-In `.env`, replace `<navidrome-host>` with your Navidrome server's address and
-adjust its port if needed. Set `MUSIC_DIR` to the music folder on this machine
-that Navidrome reads. Replace `<octocarte-host-ip>` with the LAN IP of the machine
-running Octocarte. Both hosts can be the same machine.
+2. **Configure your server and music folder**
 
-```dotenv
-NAVIDROME_URL=http://<navidrome-host>:4533
-MUSIC_DIR=/path/to/your/music
-HOST_BIND=<octocarte-host-ip>
-```
+   In `.env`, replace `<navidrome-host>` with your Navidrome server's address and
+   adjust its port if needed. Set `MUSIC_DIR` to the music folder on this machine
+   that Navidrome reads. Replace `<octocarte-host-ip>` with the LAN IP of the
+   machine running Octocarte. Both hosts can be the same machine.
 
-Save the file, then start Octocarte:
+   ```dotenv
+   NAVIDROME_URL=http://<navidrome-host>:4533
+   MUSIC_DIR=/path/to/your/music
+   HOST_BIND=<octocarte-host-ip>
+   ```
 
-```sh
-docker compose up -d
-```
+3. **Start Octocarte**
 
-Open `http://<octocarte-host-ip>:7373` for ALACarte. Grab the one-time setup token
-from `docker compose logs alacarte` and enter it on the welcome screen.
-See [first login](docs/SETUP.md#first-login) for help.
+   Save the file, then run:
 
-Create your ALACarte login, sign into Apple and choose your download preferences.
-For lyrics, [add your media-user-token and enable downloads](docs/SETUP.md#lyrics).
-Enable Navidrome integration in ALACarte with your Navidrome address and scan
-credentials.
+   ```sh
+   docker compose up -d
+   ```
 
-Point your Subsonic client to **`http://<octocarte-host-ip>:5274`** and use your
-existing Navidrome login. If using Caddy, point it at this address and port too.
+4. **Open ALACarte**
+
+   Open `http://<octocarte-host-ip>:7373`. Grab the one-time setup token from
+   the logs and enter it on the welcome screen:
+
+   ```sh
+   docker compose logs alacarte
+   ```
+
+   See [first login](docs/SETUP.md#first-login) for help.
+
+5. **Connect Apple Music**
+
+   Create your ALACarte login, sign into Apple and choose your download preferences.
+   For lyrics, [add your media-user-token and enable downloads](docs/SETUP.md#lyrics).
+
+6. **Enable Navidrome integration**
+
+   In ALACarte, enable Navidrome integration with your Navidrome address and scan
+   credentials so downloaded albums appear in your library automatically.
+
+7. **Connect your music client**
+
+   Point your Subsonic client to **`http://<octocarte-host-ip>:5274`** and use your
+   existing Navidrome login. If using a reverse proxy, point it to this address
+   and port too.
 
 [Setup help](docs/SETUP.md) · [Updating and backups](docs/OPERATIONS.md)
 
