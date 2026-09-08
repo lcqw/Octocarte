@@ -100,7 +100,9 @@ terms and the laws in your jurisdiction.
 | [Aonsoku](https://github.com/victoralvesf/aonsoku) | Linux, Windows, macOS |
 | [Navic](https://navic.app/) | Android, iOS |
 
-The clients listed are ones directly tested and confirmed working with Octocarte. Other Subsonic compatible clients should work, but it isn't guaranteed
+The clients listed are ones directly tested and confirmed working with Octocarte. Other Subsonic compatible clients should work, but it isn't guaranteed.
+
+Clients that search only their own synced library, such as [Symfonium](https://symfonium.app/), are not supported for Octocarte's Apple Music discovery. Their searches do not request external catalog results from the server.
 
 ## License
 
