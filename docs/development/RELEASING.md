@@ -25,3 +25,12 @@ such as `0.1.0-beta.1` creates a prerelease. The workflow leaves either as a dra
 until the release assets and installation checks are reviewed. Publish the draft
 only after those checks pass. Repository and container visibility are managed
 separately from release status.
+
+## Checking an existing release
+
+Run the **CI** workflow manually to pull all five images from the current
+repository owner's registry namespace. This read-only check compares their
+image IDs and registry digests with the published release manifest. It does not
+build, publish or change package visibility. It is useful after an account rename
+or changes to package access. Normal pushes and pull requests run the application
+checks instead.

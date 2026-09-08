@@ -28,6 +28,26 @@ The earlier release that bundled Navidrome needs the [migration procedure](MIGRA
 before updating its Compose file. A routine update must not orphan or recreate
 that Navidrome server unexpectedly.
 
+## Repository address change
+
+The repository is now `lcqw/Octocarte`, and images are under
+`ghcr.io/lcqw/octocarte`. Existing containers keep running. In your existing
+checkout, update the remote and installation files:
+
+```sh
+git remote set-url origin https://github.com/lcqw/Octocarte.git
+git pull --ff-only
+```
+
+If your `.env` defines `OCTOCARTE_IMAGE_BASE`, change it to
+`ghcr.io/lcqw/octocarte`. Otherwise the updated Compose file selects it
+already. Then follow the normal update commands above, keeping your `.env`,
+project name and volumes. The `0.0.6` images themselves are unchanged.
+
+Older release attachments retain their original addresses and checksums. To use
+one of those Compose files, set `OCTOCARTE_IMAGE_BASE=ghcr.io/lcqw/octocarte` in
+`.env`; this also updates ALACarte's wrapper image address.
+
 ## Restart and removal
 
 ```sh
