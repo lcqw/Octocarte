@@ -69,6 +69,7 @@ jobs:
           OCTOCARTE_TEST_SERVICE_AUTH: '1'
         run: |
           OCTOCARTE_TEST_IMAGE="$REGISTRY_PREFIX/octocarte:$RELEASE_VERSION" python3 tests/http_mvp.py
+          OCTOCARTE_TEST_SINGLE_SONG=1 OCTOCARTE_TEST_IMAGE="$REGISTRY_PREFIX/octocarte:$RELEASE_VERSION" python3 tests/http_mvp.py
           python3 tests/simple_compose_smoke.py --image-base "$REGISTRY_PREFIX/octocarte" --version "$RELEASE_VERSION" --source-archive "$RUNNER_TEMP/octocarte-release/alacarte-source.tar.gz"
       - name: Publish tested images and record registry digests
         run: |

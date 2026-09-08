@@ -67,6 +67,18 @@ class SimpleComposeTests(unittest.TestCase):
                 if mount['type'] == 'bind':
                     self.assertIn(mount['target'], {'/music', '/var/run/docker.sock', '/app/rootfs/dev/null', '/app/rootfs/dev/urandom', '/app/rootfs/dev/random', '/app/rootfs/dev/zero'})
 
+    def test_download_scope_defaults_to_albums_and_accepts_song_opt_in(self):
+        with tempfile.NamedTemporaryFile() as empty_env:
+            for value, expected in [(None, 'true'), ('true', 'true'), ('false', 'false')]:
+                env = dict(os.environ, MUSIC_DIR='/tmp/music', NAVIDROME_URL='http://navidrome:4533')
+                env.pop('DOWNLOAD_WHOLE_ALBUM', None)
+                if value is not None:
+                    env['DOWNLOAD_WHOLE_ALBUM'] = value
+                config = json.loads(subprocess.check_output(
+                    ['docker', 'compose', '--env-file', empty_env.name, '-f', str(ROOT / 'compose.yml'),
+                     'config', '--format', 'json'], env=env))
+                self.assertEqual(config['services']['octocarte']['environment']['Alacarte__DownloadWholeAlbum'], expected)
+
     def test_missing_navidrome_url_stops_configuration(self):
         with tempfile.NamedTemporaryFile() as empty_env:
             env = dict(os.environ, MUSIC_DIR='/tmp/music')

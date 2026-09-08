@@ -114,17 +114,29 @@ public class OctocarteContractTests
         Assert.Equal(new byte[] { 1, 2 }, ((MemoryStream)context.Response.Body).ToArray());
     }
 
-    [Fact]
-    public async Task PlaybackDoesNotWaitForAlbumPostAndBurstRequestsDeduplicate()
+    [Theory]
+    [InlineData(null)]
+    [InlineData("true")]
+    [InlineData("false")]
+    public async Task PlaybackDoesNotWaitForDownloadAndDeduplicatesAtConfiguredScope(string? wholeAlbum)
     {
+        var singleSong = wholeAlbum == "false";
         var postStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releasePost = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var posts = 0;
+        var barrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var replayBarrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var posts = new System.Collections.Concurrent.ConcurrentQueue<string>();
         var factory = Factory(async (req, ct) => {
-            if (req.RequestUri!.AbsolutePath == "/api/download") {
+            if (req.RequestUri!.AbsolutePath.StartsWith("/api/download")) {
+                Assert.Equal(singleSong ? "/api/download/song" : "/api/download", req.RequestUri.AbsolutePath);
                 Assert.Equal("http://fixture", Assert.Single(req.Headers.GetValues("Origin")));
-                Interlocked.Increment(ref posts);
-                Assert.Equal("{\"albumId\":\"7\"}", await req.Content!.ReadAsStringAsync(ct));
+                using var body = JsonDocument.Parse(await req.Content!.ReadAsStringAsync(ct));
+                var property = Assert.Single(body.RootElement.EnumerateObject());
+                Assert.Equal(singleSong ? "songId" : "albumId", property.Name);
+                var id = property.Value.GetString()!;
+                if (id == (singleSong ? "44" : "8")) { barrier.TrySetResult(); return Json("{}", HttpStatusCode.Conflict); }
+                if (id == (singleSong ? "45" : "9")) { replayBarrier.TrySetResult(); return Json("{}", HttpStatusCode.Conflict); }
+                posts.Enqueue(id);
                 postStarted.TrySetResult();
                 await releasePost.Task.WaitAsync(ct);
                 return Json("{}", HttpStatusCode.Conflict);
@@ -134,7 +146,12 @@ public class OctocarteContractTests
         });
         var metadata = new Mock<IMusicMetadataService>();
         metadata.Setup(m => m.GetSongAsync("apple", It.IsAny<string>())).ReturnsAsync(new Song { Title = "Song", Artist = "Artist", AlbumId = "ext-apple-album-7" });
-        using var worker = new AlbumAcquisitionService(new AlacarteClient(factory), metadata.Object, NullLogger<AlbumAcquisitionService>.Instance);
+        metadata.Setup(m => m.GetSongAsync("apple", "44")).ReturnsAsync(new Song { AlbumId = "ext-apple-album-8" });
+        metadata.Setup(m => m.GetSongAsync("apple", "45")).ReturnsAsync(new Song { AlbumId = "ext-apple-album-9" });
+        var configuration = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> {
+            ["Alacarte:DownloadWholeAlbum"] = wholeAlbum
+        }).Build();
+        using var worker = new AlbumAcquisitionService(new AlacarteClient(factory), metadata.Object, NullLogger<AlbumAcquisitionService>.Instance, configuration);
         await worker.StartAsync(default);
         try {
             var playback = new ApplePlaybackService(metadata.Object, new YouTubeResolver(factory, new ConfigurationBuilder().Build(), NullLogger<YouTubeResolver>.Instance), worker);
@@ -145,14 +162,48 @@ public class OctocarteContractTests
             for (int i = 0; i < 20; i++) Assert.True(worker.TryQueueSong("42"));
             Assert.True(worker.TryQueueSong("43")); // same parent, different track
             releasePost.TrySetResult();
-            // Barrier: a subsequent distinct album is processed only after the first album.
-            var next = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            metadata.Setup(m => m.GetSongAsync("apple", "barrier")).Returns(() => { next.TrySetResult(); return Task.FromResult<Song?>(null); });
-            worker.TryQueueSong("barrier");
-            await next.Task.WaitAsync(TimeSpan.FromSeconds(2));
-            Assert.Equal(1, posts);
+            Assert.True(worker.TryQueueSong("44")); // barrier after both requested tracks
+            await barrier.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.Equal(singleSong ? new[] { "42", "43" } : new[] { "7" }, posts.ToArray());
+            // A replay after the first POST completes is still debounced (including 409).
+            worker.TryQueueSong("42");
+            worker.TryQueueSong("45");
+            await replayBarrier.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.Equal(singleSong ? 2 : 1, posts.Count);
         }
         finally { releasePost.TrySetResult(); await worker.StopAsync(default); }
+    }
+
+    [Fact]
+    public async Task FailedSongSubmissionCanRetryWithoutResolvingAnAlbumInOctocarte()
+    {
+        var attempts = 0;
+        var firstBarrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var lastBarrier = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var factory = Factory(async (req, ct) => {
+            Assert.Equal("/api/download/song", req.RequestUri!.AbsolutePath);
+            using var body = JsonDocument.Parse(await req.Content!.ReadAsStringAsync(ct));
+            var id = body.RootElement.GetProperty("songId").GetString();
+            if (id == "43") firstBarrier.TrySetResult();
+            if (id == "44") lastBarrier.TrySetResult();
+            if (id == "42" && Interlocked.Increment(ref attempts) == 1) return Json("{}", HttpStatusCode.ServiceUnavailable);
+            return Json("{}", HttpStatusCode.Accepted);
+        });
+        var metadata = new Mock<IMusicMetadataService>(MockBehavior.Strict);
+        var config = new ConfigurationBuilder().AddInMemoryCollection(new Dictionary<string, string?> {
+            ["Alacarte:DownloadWholeAlbum"] = "false"
+        }).Build();
+        using var worker = new AlbumAcquisitionService(new AlacarteClient(factory), metadata.Object, NullLogger<AlbumAcquisitionService>.Instance, config);
+        await worker.StartAsync(default);
+        try {
+            worker.TryQueueSong("42"); worker.TryQueueSong("43");
+            await firstBarrier.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            worker.TryQueueSong("42"); worker.TryQueueSong("44");
+            await lastBarrier.Task.WaitAsync(TimeSpan.FromSeconds(2));
+            Assert.Equal(2, attempts);
+            metadata.VerifyNoOtherCalls();
+        }
+        finally { await worker.StopAsync(default); }
     }
 
     [Fact]

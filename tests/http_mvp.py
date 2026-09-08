@@ -18,6 +18,7 @@ import urllib.request
 import uuid
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
+single_song = os.environ.get("OCTOCARTE_TEST_SINGLE_SONG") == "1"
 service_auth = os.environ.get("OCTOCARTE_TEST_SERVICE_AUTH") == "1"
 auth_token = secrets.token_urlsafe(32)
 image_name = os.environ.get("OCTOCARTE_TEST_IMAGE", "octocarte:mvp")
@@ -102,7 +103,7 @@ class Fixture(BaseHTTPRequestHandler):
         return self.reply({"subsonic-response": response})
 
     def do_POST(self):
-        assert self.path == "/api/download"
+        assert self.path == ("/api/download/song" if single_song else "/api/download")
         if service_auth:
             assert self.headers.get("Authorization") == "Bearer " + auth_token
             assert not self.headers.get("Cookie")
@@ -120,7 +121,8 @@ class Fixture(BaseHTTPRequestHandler):
         else:
             raw = self.rfile.read(int(self.headers["Content-Length"]))
         body = json.loads(raw)
-        assert body == {"albumId": "7"}, body
+        assert self.path == ("/api/download/song" if single_song else "/api/download"), self.path
+        assert body == ({"songId": "42"} if single_song else {"albumId": "7"}), body
         state["posts"].append(body)
         post_started.set()
         release_post.wait(10)
@@ -147,12 +149,13 @@ secret_dir = tempfile.TemporaryDirectory(prefix="octocarte-http-auth-")
 token_path = Path(secret_dir.name) / "service-token"
 token_path.write_text(auth_token)
 token_path.chmod(0o600)
+mode_args = ["-e", "Alacarte__DownloadWholeAlbum=false"] if single_song else []
 auth_args = ["-v", str(token_path) + ":/run/secrets/alacarte-token:ro", "-e", "Alacarte__ServiceTokenFile=/run/secrets/alacarte-token"] if service_auth else []
 try:
     subprocess.run(["docker", "run", "--rm", "-d", "--name", name, "--network", "host",
                     "-e", f"ASPNETCORE_URLS={base}", "-e", f"Subsonic__Url={fixture_url}",
                     "-e", "Subsonic__MusicService=Alacarte", "-e", f"Alacarte__Url={fixture_url}",
-                    "-e", f"YouTube__ShimUrl={fixture_url}", *auth_args, image_name], check=True, stdout=subprocess.DEVNULL)
+                    "-e", f"YouTube__ShimUrl={fixture_url}", *auth_args, *mode_args, image_name], check=True, stdout=subprocess.DEVNULL)
     for _ in range(100):
         try:
             urllib.request.urlopen(base, timeout=1).close()
@@ -249,7 +252,7 @@ try:
     with get("/rest/search3", query="Song") as response:
         songs = json.load(response)["subsonic-response"]["searchResult3"]["song"]
     assert len(songs) == 1 and songs[0]["id"] == "local-42"
-    print("PASS: artist images, ranked top songs, local replacement, XML/JSON, extension advertising, fallback, HTTP catalog, external IDs, AAC metadata, nonblocking album POST, burst guard, ranges, local search replacement and old-ID Navidrome playback")
+    print("PASS: artist images, ranked top songs, local replacement, XML/JSON, extension advertising, fallback, HTTP catalog, external IDs, AAC metadata, nonblocking download POST, burst guard, ranges, local search replacement and old-ID Navidrome playback")
 finally:
     release_post.set()
     subprocess.run(["docker", "rm", "-f", name], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)

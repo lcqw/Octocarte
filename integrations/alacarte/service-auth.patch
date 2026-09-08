@@ -1,32 +1,9 @@
-diff --git a/backend/lib/requireAuth.mjs b/backend/lib/requireAuth.mjs
-index 33bd517..5cb7542 100644
---- a/backend/lib/requireAuth.mjs
-+++ b/backend/lib/requireAuth.mjs
-@@ -1,3 +1,4 @@
-+import { authorizeIntegration } from './integrationAuth.mjs'
- import {
-   getSessionVersion,
-   isPasswordSet,
-@@ -41,6 +42,13 @@ const ALWAYS_PUBLIC = new Set([
- 
- export function requireAuth() {
-   return async (req, res, next) => {
-+    const integration = await authorizeIntegration(req)
-+    if (integration !== null) {
-+      if (integration !== 200)
-+        return res.status(integration).json({ error: integration === 401 ? 'unauthorized' : 'forbidden' })
-+      req.integration = 'octocarte'
-+      return next()
-+    }
-     if (AUTH_DISABLED) return next()
-     if (!req.path.startsWith('/api/')) return next()
-     if (ALWAYS_PUBLIC.has(req.path)) return next()
 diff --git a/backend/lib/integrationAuth.mjs b/backend/lib/integrationAuth.mjs
 new file mode 100644
-index 0000000..bf82a85
+index 0000000..21e2332
 --- /dev/null
 +++ b/backend/lib/integrationAuth.mjs
-@@ -0,0 +1,42 @@
+@@ -0,0 +1,45 @@
 +// SPDX-License-Identifier: AGPL-3.0-only
 +import crypto from 'node:crypto'
 +import fs from 'node:fs/promises'
@@ -41,11 +18,14 @@ index 0000000..bf82a85
 +      || /^\/api\/album\/\d+$/.test(req.path)
 +      || /^\/api\/artist\/\d+(?:\/top-songs)?$/.test(req.path)
 +  }
-+  if (req.method !== 'POST' || req.path !== '/api/download') return false
++  if (req.method !== 'POST') return false
++  const key = req.path === '/api/download' ? 'albumId'
++    : req.path === '/api/download/song' ? 'songId' : null
++  if (!key) return false
 +  const body = req.body
 +  return body && typeof body === 'object' && !Array.isArray(body)
 +    && Object.keys(body).length === 1
-+    && typeof body.albumId === 'string' && /^\d+$/.test(body.albumId)
++    && typeof body[key] === 'string' && /^\d+$/.test(body[key])
 +}
 +
 +// Null leaves normal browser/session authentication unchanged.
@@ -69,12 +49,35 @@ index 0000000..bf82a85
 +  if (!crypto.timingSafeEqual(hash(match[1]), hash(expected))) return 401
 +  return permits(req) ? 200 : 403
 +}
+diff --git a/backend/lib/requireAuth.mjs b/backend/lib/requireAuth.mjs
+index 33bd517..5cb7542 100644
+--- a/backend/lib/requireAuth.mjs
++++ b/backend/lib/requireAuth.mjs
+@@ -1,3 +1,4 @@
++import { authorizeIntegration } from './integrationAuth.mjs'
+ import {
+   getSessionVersion,
+   isPasswordSet,
+@@ -41,6 +42,13 @@ const ALWAYS_PUBLIC = new Set([
+
+ export function requireAuth() {
+   return async (req, res, next) => {
++    const integration = await authorizeIntegration(req)
++    if (integration !== null) {
++      if (integration !== 200)
++        return res.status(integration).json({ error: integration === 401 ? 'unauthorized' : 'forbidden' })
++      req.integration = 'octocarte'
++      return next()
++    }
+     if (AUTH_DISABLED) return next()
+     if (!req.path.startsWith('/api/')) return next()
+     if (ALWAYS_PUBLIC.has(req.path)) return next()
 diff --git a/backend/test/integrationAuth.test.mjs b/backend/test/integrationAuth.test.mjs
 new file mode 100644
-index 0000000..c469311
+index 0000000..2def52f
 --- /dev/null
 +++ b/backend/test/integrationAuth.test.mjs
-@@ -0,0 +1,55 @@
+@@ -0,0 +1,62 @@
 +import { test } from 'node:test'
 +import assert from 'node:assert/strict'
 +import crypto from 'node:crypto'
@@ -85,7 +88,7 @@ index 0000000..c469311
 +
 +const token = () => crypto.randomBytes(32).toString('base64url')
 +
-+test('integration token is bounded to catalog reads and album-only submission', async () => {
++test('integration token is bounded to catalog reads and album or song submission', async () => {
 +  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'octocarte-token-'))
 +  const file = path.join(dir, 'token')
 +  const secret = token()
@@ -95,12 +98,19 @@ index 0000000..c469311
 +    for (const route of ['/api/search', '/api/album/123', '/api/artist/123', '/api/artist/123/top-songs'])
 +      assert.equal(await authorizeIntegration(req('GET', route), file), 200)
 +    assert.equal(await authorizeIntegration(req('POST', '/api/download', { albumId: '123' }), file), 200)
++    assert.equal(await authorizeIntegration(req('POST', '/api/download/song', { songId: '456' }), file), 200)
 +    for (const route of ['/api/settings', '/api/queue', '/api/library', '/api/auth/state', '/api/artist/123/other', '/api/artist/%31', '/api/album/../settings'])
 +      assert.equal(await authorizeIntegration(req('GET', route), file), 403)
 +    for (const route of ['/api/download/song', '/api/download/playlist', '/api/download/cancel-all', '/api/settings', '/api/download/'])
 +      assert.equal(await authorizeIntegration(req('POST', route, { albumId: '123' }), file), 403)
 +    for (const body of [{}, null, [], { albumId: 123 }, { albumId: '../settings' }, { albumId: '123', quality: 'aac' }])
 +      assert.equal(await authorizeIntegration(req('POST', '/api/download', body), file), 403)
++    for (const body of [{}, null, [], { songId: 123 }, { songId: '../settings' }, { songId: '123', quality: 'aac' }, { songId: '123', storefront: 'gb' }, { songId: '123', albumId: '7' }, { albumId: '7' }])
++      assert.equal(await authorizeIntegration(req('POST', '/api/download/song', body), file), 403)
++    for (const method of ['GET', 'DELETE', 'PUT'])
++      assert.equal(await authorizeIntegration(req(method, '/api/download/song', { songId: '123' }), file), 403)
++    for (const route of ['/api/download/song/', '/api/download/playlist', '/api/download/cancel-all', '/api/settings'])
++      assert.equal(await authorizeIntegration(req('POST', route, { songId: '123' }), file), 403)
 +    assert.equal(await authorizeIntegration(req('DELETE', '/api/download', { albumId: '123' }), file), 403)
 +    assert.equal(await authorizeIntegration({ ...req('GET', '/api/search'), headers: {} }, file), null)
 +    assert.equal(await authorizeIntegration({ ...req('GET', '/api/search'), headers: { authorization: 'Bearer ' + token() } }, file), 401)
@@ -132,10 +142,10 @@ index 0000000..c469311
 +})
 diff --git a/backend/test/integrationAuthHttp.test.mjs b/backend/test/integrationAuthHttp.test.mjs
 new file mode 100644
-index 0000000..7a23ca3
+index 0000000..63c77aa
 --- /dev/null
 +++ b/backend/test/integrationAuthHttp.test.mjs
-@@ -0,0 +1,56 @@
+@@ -0,0 +1,61 @@
 +import { test } from 'node:test'
 +import assert from 'node:assert/strict'
 +import crypto from 'node:crypto'
@@ -166,6 +176,7 @@ index 0000000..7a23ca3
 +  app.use(express.json(), cookieParser(), originGuard(), requireAuth())
 +  app.get('/api/search', (_req, res) => res.json({ songs: [] }))
 +  app.get('/api/settings', (_req, res) => res.json({ fixture: true }))
++  app.post('/api/download/song', (_req, res) => res.status(202).json({ accepted: true }))
 +  app.post('/api/download', (_req, res) => res.status(202).json({ accepted: true }))
 +  const server = app.listen(0, '127.0.0.1')
 +  await new Promise(resolve => server.once('listening', resolve))
@@ -184,6 +195,10 @@ index 0000000..7a23ca3
 +    assert.equal((await fetch(base + '/api/download', post)).status, 403)
 +    assert.equal((await fetch(base + '/api/download', { ...post, headers: { ...post.headers, Origin: base } })).status, 202)
 +    assert.equal((await fetch(base + '/api/download', { ...post, headers: { ...post.headers, Origin: base }, body: JSON.stringify({ albumId: '123', quality: 'aac' }) })).status, 403)
++    const songPost = { ...post, body: JSON.stringify({ songId: '456' }) }
++    assert.equal((await fetch(base + '/api/download/song', songPost)).status, 403)
++    assert.equal((await fetch(base + '/api/download/song', { ...songPost, headers: { ...post.headers, Origin: base } })).status, 202)
++    assert.equal((await fetch(base + '/api/download/song', { ...post, headers: { ...post.headers, Origin: base } })).status, 403)
 +    await fs.unlink(process.env.OCTOCARTE_TOKEN_FILE)
 +    assert.equal((await fetch(base + '/api/search', { headers: bearer })).status, 401)
 +    assert.equal((await fetch(base + '/api/settings', { headers: { Cookie: 'alacarte_session=' + cookie } })).status, 200)
